@@ -11,7 +11,11 @@ COLOR_WHITE = "#FFFFFF"   # Branco
 class Bet2ImageGenerator:
     def __init__(self, assets_dir="../assets"):
         self.assets_dir = assets_dir
-        self.logo_path = os.path.join(assets_dir, "logo.png")
+        # Procura por logo.jpeg (ou logo.png como alternativa)
+        self.logo_path = os.path.join(assets_dir, "logo.jpeg")
+        if not os.path.exists(self.logo_path):
+            self.logo_path = os.path.join(assets_dir, "logo.png")
+            
         self.font_path = os.path.join(assets_dir, "font.ttf")
         
         if os.path.exists(self.logo_path):
@@ -61,8 +65,3 @@ class Bet2ImageGenerator:
         temp_path = "temp_card.png"
         img.save(temp_path)
         return temp_path
-
-if __name__ == "__main__":
-    generator = Bet2ImageGenerator(assets_dir="../assets")
-    path = generator.generate_prognostico_card(104, "27/10/2026", "18:30", 1.95, True)
-    print("Cartão gerado:", path)
