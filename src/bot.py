@@ -271,5 +271,11 @@ def ver_estatisticas(message):
     bot.reply_to(message, texto_stats, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    print("Bot com comando de apagar jogo a iniciar polling...")
-    bot.infinity_polling()
+    print("A limpar conexões antigas do Telegram...")
+    try:
+        bot.remove_webhook()
+    except Exception:
+        pass
+        
+    print("Bot modularizado a iniciar polling limpo...")
+    bot.infinity_polling(skip_pending=True, interval=1, timeout=20)
