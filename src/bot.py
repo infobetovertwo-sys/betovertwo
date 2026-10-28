@@ -110,7 +110,6 @@ def publicar_regras(message):
     destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
     msg_enviada = bot.send_message(destino, texto_regras, parse_mode="Markdown", reply_markup=markup)
     
-    # Tentar fixar a mensagem automaticamente no canal
     try:
         bot.pin_chat_message(destino, msg_enviada.message_id)
     except Exception:
@@ -118,7 +117,6 @@ def publicar_regras(message):
 
     bot.reply_to(message, "✅ Mensagem de Regras e Estatísticas publicada e fixada no canal!", parse_mode="Markdown")
 
-# Callback para quando o utilizador aceita as regras
 @bot.callback_query_handler(func=lambda call: call.data == "aceitar_regras")
 def callback_aceitar_regras(call):
     user_name = call.from_user.first_name or "Membro"
@@ -133,7 +131,7 @@ def callback_aceitar_regras(call):
         bot.send_message(call.from_user.id, texto_privado, parse_mode="Markdown")
         bot.answer_callback_query(call.id, "✅ Regras aceites com sucesso! Verifica o teu chat privado.", show_alert=True)
     except Exception:
-        bot.answer_callback_query(call.id, "⚠️ Por favor, inicia primeiro uma conversa privada com o bot (clica nele e envia /start).", show_alert=True)
+        bot.answer_callback_query(call.id, "⚠️ Por favor, inicia primeiro uma conversa privada com o bot.", show_alert=True)
 
 @bot.message_handler(commands=['publicar'])
 def publicar_prognostico(message):
@@ -322,7 +320,6 @@ def confirmar_pagamento(message):
     except Exception:
         pass
 
-@bot.message_handler(commands:/stats)  # (corrigido abaixo no bloco)
 @bot.message_handler(commands=['stats'])
 def ver_estatisticas(message):
     pub, greens, reds = obter_estatisticas_globais()
