@@ -77,6 +77,64 @@ def apagar_jogo_comando(message):
     else:
         bot.reply_to(message, f"❌ Jogo `{jogo_id}` não encontrado.", parse_mode="Markdown")
 
+# Comando para publicar as Regras e Estatísticas fixadas no canal
+@bot.message_handler(commands=['regras'])
+def publicar_regras(message):
+    if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
+        return
+
+    pub, greens, reds = obter_estatisticas_globais()
+    total = greens + reds
+    win_rate = (greens / total * 100) if total > 0 else 0
+
+    texto_regras = (
+        "📌 **BEM-VINDO AO BETOVERTWO - REGRAS & ESTATÍSTICAS** 📊\n\n"
+        "🎯 **Como Funciona:**\n"
+        "• Publicamos prognósticos exclusivos no mercado **Ambas Marcam & +2.5 Golos**.\n"
+        "• O jogo é publicado oculto. Podes desbloquear os detalhes **gratuitamente** clicando no botão do jogo.\n\n"
+        "⚖️ **Regras de Ouro:**\n"
+        "1️⃣ O acesso aos prognósticos é totalmente grátis.\n"
+        "2️⃣ Só pagas **2€ via MB Way** se o prognóstico der **GREEN** (ganho).\n"
+        "3️⃣ Após um Green, tens um prazo de **24 horas** para efetuar o pagamento e enviar a referência.\n"
+        "4️⃣ O incumprimento do pagamento resulta em exclusão permanente do canal.\n\n"
+        "📊 **Estatísticas Oficiais:**\n"
+        f"• Prognósticos: `{pub}`\n"
+        f"• Greens: `{greens} 🟢` | Reds: `{reds} ❌`\n"
+        f"• **Win Rate:** `{win_rate:.1f}%`\n\n"
+        "👇 *Para aceitar as regras e desbloquear a participação no canal, clica no botão abaixo:*"
+    )
+
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("✅ Li e Aceito as Regras", callback_data="aceitar_regras"))
+
+    destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
+    msg_enviada = bot.send_message(destino, texto_regras, parse_mode="Markdown", reply_markup=markup)
+    
+    # Tentar fixar a mensagem automaticamente no canal
+    try:
+        bot.pin_chat_message(destino, msg_enviada.message_id)
+    except Exception:
+        pass
+
+    bot.reply_to(message, "✅ Mensagem de Regras e Estatísticas publicada e fixada no canal!", parse_mode="Markdown")
+
+# Callback para quando o utilizador aceita as regras
+@bot.callback_query_handler(func=lambda call: call.data == "aceitar_regras")
+def callback_aceitar_regras(call):
+    user_name = call.from_user.first_name or "Membro"
+    
+    texto_privado = (
+        f"👋 Olá **{user_name}**, obrigado por aceitares as regras do **BetOverTwo**!\n\n"
+        "Estás oficialmente habilitado a acompanhar os prognósticos e a participar na comunidade.\n"
+        "Lembra-te: **Só pagas 2€ se der Green!** 🟢 Bons lucros!"
+    )
+
+    try:
+        bot.send_message(call.from_user.id, texto_privado, parse_mode="Markdown")
+        bot.answer_callback_query(call.id, "✅ Regras aceites com sucesso! Verifica o teu chat privado.", show_alert=True)
+    except Exception:
+        bot.answer_callback_query(call.id, "⚠️ Por favor, inicia primeiro uma conversa privada com o bot (clica nele e envia /start).", show_alert=True)
+
 @bot.message_handler(commands=['publicar'])
 def publicar_prognostico(message):
     if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
@@ -99,13 +157,11 @@ def publicar_prognostico(message):
         bot.reply_to(message, "⚠️ Formato de data inválido! Usa: `DD/MM/AAAA HH:MM`", parse_mode="Markdown")
         return
 
-    # Separar data e hora para linhas distintas
     data_str = data_hora_obj.strftime("%d/%m/%Y")
     hora_str = data_hora_obj.strftime("%H:%M")
 
     jogo_id = guardar_jogo(equipas, data_hora_str, data_hora_obj, odd)
 
-    # Publicação no canal com as equipas ocultas
     texto_canal = (
         f"⚽ **BetOverTwo - Prognóstico {jogo_id}**\n\n"
         f"🏟️ **Equipas:** Oculto 🔒\n"
@@ -266,6 +322,7 @@ def confirmar_pagamento(message):
     except Exception:
         pass
 
+@bot.message_handler(commands:/stats)  # (corrigido abaixo no bloco)
 @bot.message_handler(commands=['stats'])
 def ver_estatisticas(message):
     pub, greens, reds = obter_estatisticas_globais()
