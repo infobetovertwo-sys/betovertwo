@@ -5,14 +5,13 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# Importar as funções da base de dados modularizada
 from db import (
     init_db, guardar_jogo, obter_jogo, registar_clique,
     processar_resultado_jogo, obter_dados_lista,
     confirmar_pagamento_por_ref, obter_estatisticas_globais
 )
 
-# Servidor web para o Render
+# Servidor web para manter o Render ativo
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -42,7 +41,7 @@ init_db()
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "🤖 O bot do **BetOverTwo** está operacional com arquitetura modularizada.", parse_mode="Markdown")
+    bot.reply_to(message, "🤖 O bot do **BetOverTwo** está operacional.", parse_mode="Markdown")
 
 @bot.message_handler(commands=['publicar'])
 def publicar_prognostico(message):
@@ -52,11 +51,13 @@ def publicar_prognostico(message):
     texto_args = message.text.replace("/publicar", "").strip()
     parts = [p.strip() for p in texto_args.split("|")]
     
-    if len(parts) < 4:
-        bot.reply_to(message, "⚠️ **Uso incorreto!** Formato:\n`/publicar J1 | Equipas | DD/MM/AAAA HH:MM | Odd`", parse_mode="Markdown")
+    if len(parts) < 3:
+        bot.reply_to(message, "⚠️ **Uso incorreto!** Formato simplificado:\n`/publicar Equipas | DD/MM/AAAA HH:MM | Odd`", parse_mode="Markdown")
         return
     
-    jogo_id, equipas, data_hora_str, odd = parts[0].upper(), parts[1], parts[2], parts[3]
+    equipas = parts[0]
+    data_hora_str = parts[1]
+    odd = parts[2]
     
     try:
         data_hora_obj = datetime.strptime(data_hora_str, "%d/%m/%Y %H:%M")
@@ -64,7 +65,8 @@ def publicar_prognostico(message):
         bot.reply_to(message, "⚠️ Formato de data inválido! Usa: `DD/MM/AAAA HH:MM`", parse_mode="Markdown")
         return
 
-    guardar_jogo(jogo_id, equipas, data_hora_str, data_hora_obj, odd)
+    # O bot gera o ID automaticamente (J1, J2, J3...)
+    jogo_id = guardar_jogo(equipas, data_hora_str, data_hora_obj, odd)
 
     texto_canal = (
         f"⚽ **BetOverTwo - Prognóstico {jogo_id}**\n\n"
@@ -79,7 +81,7 @@ def publicar_prognostico(message):
     
     destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
     bot.send_message(destino, texto_canal, parse_mode="Markdown", reply_markup=markup)
-    bot.reply_to(message, f"✅ Prognóstico `{jogo_id}` publicado no canal!", parse_mode="Markdown")
+    bot.reply_to(message, f"✅ Prognóstico `{jogo_id}` gerado e publicado automaticamente no canal!", parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("desbloquear_"))
 def callback_desbloquear(call):
@@ -241,5 +243,5 @@ def ver_estatisticas(message):
     bot.reply_to(message, texto_stats, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    print("Bot modularizado a iniciar polling...")
+    print("Bot modularizado com IDs automáticos a iniciar polling...")
     bot.infinity_polling()
