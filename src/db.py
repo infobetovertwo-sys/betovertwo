@@ -55,6 +55,40 @@ def init_db():
     conn.commit()
     conn.close()
 
+def reset_database():
+    """Apaga todos os dados e reinicia a base de dados do zero."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DROP TABLE IF EXISTS participantes")
+    cursor.execute("DROP TABLE IF EXISTS jogos")
+    cursor.execute("DROP TABLE IF EXISTS estatisticas")
+    conn.commit()
+    conn.close()
+    init_db()
+
+def apagar_jogo_por_id(jogo_id):
+    """Apaga um jogo específico e os seus participantes, decrementando o contador de publicados."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Verificar se o jogo existe
+    cursor.execute("SELECT jogo_id FROM jogos WHERE jogo_id = ?", (jogo_id,))
+    if not cursor.fetchone():
+        conn.close()
+        return False
+        
+    # Apagar participantes associados
+    cursor.execute("DELETE FROM participantes WHERE jogo_id = ?", (jogo_id,))
+    # Apagar o jogo
+    cursor.execute("DELETE FROM jogos WHERE jogo_id = ?", (jogo_id,))
+    
+    # Decrementar o contador de publicados nas estatísticas
+    cursor.execute("UPDATE estatisticas SET valor = MAX(0, valor - 1) WHERE chave = 'publicados'")
+    
+    conn.commit()
+    conn.close()
+    return True
+
 def proximo_jogo_id():
     conn = get_db_connection()
     cursor = conn.cursor()
