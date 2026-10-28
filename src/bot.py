@@ -8,7 +8,8 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 from db import (
     init_db, guardar_jogo, obter_jogo, registar_clique,
     processar_resultado_jogo, obter_dados_lista,
-    confirmar_pagamento_por_ref, obter_estatisticas_globais
+    confirmar_pagamento_por_ref, obter_estatisticas_globais,
+    reset_database, apagar_jogo_por_id
 )
 
 # Servidor web para manter o Render ativo
@@ -43,6 +44,34 @@ init_db()
 def send_welcome(message):
     bot.reply_to(message, "🤖 O bot do **BetOverTwo** está operacional.", parse_mode="Markdown")
 
+# Comando Secreto de Reset (Apenas Admin)
+@bot.message_handler(commands=['reset'])
+def reset_sistema(message):
+    if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
+        return
+
+    reset_database()
+    bot.reply_to(message, "⚠️ **RESET EFETUADO COM SUCESSO!**\nTodos os dados, jogos e estatísticas foram apagados. O próximo jogo voltará a ser o **J1**.", parse_mode="Markdown")
+
+# Comando para apagar um jogo específico (Ex: /apagar J1)
+@bot.message_handler(commands=['apagar'])
+def apagar_jogo_comando(message):
+    if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
+        return
+
+    args = message.text.split()
+    if len(args) < 2:
+        bot.reply_to(message, "⚠️ Uso correto: `/apagar [ID_do_Jogo]` (ex: `/apagar J1`)", parse_mode="Markdown")
+        return
+        
+    jogo_id = args[1].upper()
+    sucesso = apagar_jogo_por_id(jogo_id)
+    
+    if sucesso:
+        bot.reply_to(message, f"🗑️ Jogo `{jogo_id}` apagado com sucesso da base de dados.", parse_mode="Markdown")
+    else:
+        bot.reply_to(message, f"❌ Jogo `{jogo_id}` não encontrado.", parse_mode="Markdown")
+
 @bot.message_handler(commands=['publicar'])
 def publicar_prognostico(message):
     if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
@@ -65,7 +94,6 @@ def publicar_prognostico(message):
         bot.reply_to(message, "⚠️ Formato de data inválido! Usa: `DD/MM/AAAA HH:MM`", parse_mode="Markdown")
         return
 
-    # O bot gera o ID automaticamente (J1, J2, J3...)
     jogo_id = guardar_jogo(equipas, data_hora_str, data_hora_obj, odd)
 
     texto_canal = (
@@ -243,5 +271,5 @@ def ver_estatisticas(message):
     bot.reply_to(message, texto_stats, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    print("Bot modularizado com IDs automáticos a iniciar polling...")
+    print("Bot com comando de apagar jogo a iniciar polling...")
     bot.infinity_polling()
