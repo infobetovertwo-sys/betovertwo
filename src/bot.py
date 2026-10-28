@@ -19,6 +19,10 @@ class SimpleHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"BetOverTwo Bot is alive and running!")
+        
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
 
 def run_web_server():
     port = int(os.environ.get("PORT", 10000))
@@ -95,13 +99,19 @@ def publicar_prognostico(message):
         bot.reply_to(message, "⚠️ Formato de data inválido! Usa: `DD/MM/AAAA HH:MM`", parse_mode="Markdown")
         return
 
+    # Separar data e hora para linhas distintas
+    data_str = data_hora_obj.strftime("%d/%m/%Y")
+    hora_str = data_hora_obj.strftime("%H:%M")
+
     jogo_id = guardar_jogo(equipas, data_hora_str, data_hora_obj, odd)
 
     texto_canal = (
         f"⚽ **BetOverTwo - Prognóstico {jogo_id}**\n\n"
-        f"📅 **Data e Hora:** {data_hora_str}\n"
-        "🎯 **Mercado:** Ambas Marcam & +2.5 Golos\n"
-        "📉 **Odd Mínima:** > 1.75\n\n"
+        f"🏟️ **Equipas:** {equipas}\n"
+        f"📅 **Data:** {data_str}\n"
+        f"⏰ **Hora:** {hora_str}\n"
+        f"🎯 **Mercado:** Ambas Marcam & +2.5 Golos\n"
+        f"📈 **Odd:** `{odd}`\n\n"
         "🔒 *Jogo Oculto - Clica abaixo para desbloquear gratuitamente.*"
     )
     
@@ -272,14 +282,14 @@ def ver_estatisticas(message):
     bot.reply_to(message, texto_stats, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    print("Aguardando 5 segundos para garantir que instâncias anteriores fecham...")
-    time.sleep(5)
+    print("Aguardando 6 segundos para limpeza total de instâncias anteriores...")
+    time.sleep(6)
     
-    print("A limpar conexões antigas do Telegram...")
+    print("A limpar webhooks e conexões pendentes do Telegram...")
     try:
         bot.remove_webhook()
     except Exception:
         pass
         
-    print("Bot anti-conflito a iniciar polling limpo...")
+    print("Bot anti-conflito iniciado com sucesso. A escutar mensagens...")
     bot.infinity_polling(skip_pending=True, interval=2, timeout=20)
