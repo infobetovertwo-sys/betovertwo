@@ -77,7 +77,7 @@ def apagar_jogo_comando(message):
     else:
         bot.reply_to(message, f"❌ Jogo `{jogo_id}` não encontrado.", parse_mode="Markdown")
 
-# Comando para publicar as Regras e Estatísticas fixadas no canal
+# Comando para publicar as Regras e Estatísticas fixadas no canal (com o aviso claro reforçado)
 @bot.message_handler(commands=['regras'])
 def publicar_regras(message):
     if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
@@ -91,21 +91,21 @@ def publicar_regras(message):
         "📌 **BEM-VINDO AO BETOVERTWO - REGRAS & ESTATÍSTICAS** 📊\n\n"
         "🎯 **Como Funciona:**\n"
         "• Publicamos prognósticos exclusivos no mercado **Ambas Marcam & +2.5 Golos**.\n"
-        "• O jogo é publicado oculto. Podes desbloquear os detalhes **gratuitamente** clicando no botão do jogo.\n\n"
-        "⚖️ **Regras de Ouro:**\n"
-        "1️⃣ O acesso aos prognósticos é totalmente grátis.\n"
-        "2️⃣ Só pagas **2€ via MB Way** se o prognóstico der **GREEN** (ganho).\n"
-        "3️⃣ Após um Green, tens um prazo de **24 horas** para efetuar o pagamento e enviar a referência.\n"
-        "4️⃣ O incumprimento do pagamento resulta em exclusão permanente do canal.\n\n"
+        "• O jogo é publicado oculto. Podes desbloquear os detalhes clicando no botão do jogo.\n\n"
+        "⚖️ **Regras de Ouro & Compromisso:**\n"
+        "1️⃣ O acesso para visualizar os prognósticos é gratuito.\n"
+        "2️⃣ **ATENÇÃO:** Ao clicares no botão para desbloquear e ver o prognóstico, **assumes o compromisso obrigatório de pagar 2€ via MB Way** caso esse prognóstico dê **GREEN** (ganho).\n"
+        "3️⃣ Após um Green, recebes a referência e tens **24 horas** para efetuar o pagamento.\n"
+        "4️⃣ O incumprimento do pagamento após um Green resulta em banimento e exclusão permanente do canal.\n\n"
         "📊 **Estatísticas Oficiais:**\n"
         f"• Prognósticos: `{pub}`\n"
         f"• Greens: `{greens} 🟢` | Reds: `{reds} ❌`\n"
         f"• **Win Rate:** `{win_rate:.1f}%`\n\n"
-        "👇 *Para aceitar as regras e desbloquear a participação no canal, clica no botão abaixo:*"
+        "👇 *Para aceitar estritamente estas regras e desbloquear o acesso ao canal, clica no botão abaixo:*"
     )
 
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("✅ Li e Aceito as Regras", callback_data="aceitar_regras"))
+    markup.add(InlineKeyboardButton("✅ Li, Compreendi e Aceito as Regras", callback_data="aceitar_regras"))
 
     destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
     msg_enviada = bot.send_message(destino, texto_regras, parse_mode="Markdown", reply_markup=markup)
@@ -115,7 +115,7 @@ def publicar_regras(message):
     except Exception:
         pass
 
-    bot.reply_to(message, "✅ Mensagem de Regras e Estatísticas publicada e fixada no canal!", parse_mode="Markdown")
+    bot.reply_to(message, "✅ Mensagem de Regras atualizada, publicada e fixada no canal!", parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data == "aceitar_regras")
 def callback_aceitar_regras(call):
@@ -123,8 +123,9 @@ def callback_aceitar_regras(call):
     
     texto_privado = (
         f"👋 Olá **{user_name}**, obrigado por aceitares as regras do **BetOverTwo**!\n\n"
-        "Estás oficialmente habilitado a acompanhar os prognósticos e a participar na comunidade.\n"
-        "Lembra-te: **Só pagas 2€ se der Green!** 🟢 Bons lucros!"
+        "Estás oficialmente autorizado a acompanhar os prognósticos.\n"
+        "⚠️ Lembra-te: **Sempre que clicares para desbloquear um jogo e este der Green, o pagamento de 2€ via MB Way é obrigatório.**\n\n"
+        "Bons lucros e excelentes apostas! 🟢"
     )
 
     try:
@@ -167,11 +168,11 @@ def publicar_prognostico(message):
         f"⏰ **Hora:** {hora_str}\n"
         f"🎯 **Mercado:** Ambas Marcam & +2.5 Golos\n"
         f"📈 **Odd:** `{odd}`\n\n"
-        "🔒 *Jogo Oculto - Clica abaixo para desbloquear gratuitamente.*"
+        "🔒 *Jogo Oculto - Clica abaixo para desbloquear.*"
     )
     
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton(f"🔓 Desbloquear Grátis ({jogo_id})", callback_data=f"desbloquear_{jogo_id}"))
+    markup.add(InlineKeyboardButton(f"🔓 Desbloquear (Aceito pagar 2€ se der Green) ({jogo_id})", callback_data=f"desbloquear_{jogo_id}"))
     
     destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
     bot.send_message(destino, texto_canal, parse_mode="Markdown", reply_markup=markup)
@@ -201,14 +202,14 @@ def callback_desbloquear(call):
         f"⚽ **Equipas:** {jogo['equipas']}\n"
         f"🎯 **Mercado:** Ambas Marcam & +2.5 Golos\n"
         f"📉 **Odd:** `{jogo['odd']}`\n\n"
-        "📌 *Nota:* Assumes o compromisso de honrar **2€ via MB Way** apenas se der **Green**."
+        "📌 **Compromisso:** Ao desbloqueares este jogo, assumiste o compromisso de honrar **2€ via MB Way** caso o resultado seja **Green**."
     )
 
     try:
         bot.send_message(user_id, texto_privado, parse_mode="Markdown")
-        bot.answer_callback_query(call.id, "Detalhes enviados em privado!")
+        bot.answer_callback_query(call.id, "Detalhes desbloqueados e enviados em privado!")
     except Exception:
-        bot.answer_callback_query(call.id, "Inicia primeiro chat privado com o bot.", show_alert=True)
+        bot.answer_callback_query(call.id, "Inicia primeiro chat privado com o bot (/start).", show_alert=True)
 
 @bot.message_handler(commands=['resultado'])
 def registar_resultado(message):
@@ -247,7 +248,7 @@ def registar_resultado(message):
         for u_id, ref_codigo in resultado_processamento['cobrancas']:
             msg_cobranca = (
                 f"🎉 O Jogo **{jogo_id}** deu **GREEN!** 🟢\n\n"
-                f"Efetua o pagamento de **2€** via MB Way (`{MBWAY_NUMBER}`).\n"
+                f"Conforme as regras aceites, efetua o pagamento de **2€** via MB Way (`{MBWAY_NUMBER}`).\n"
                 f"🔑 **Referência:** `{ref_codigo}` (Prazo: 24h)"
             )
             try:
@@ -316,7 +317,7 @@ def confirmar_pagamento(message):
         
     bot.reply_to(message, f"✅ Pagamento `{ref}` ({resultado['user_name']}) confirmado!", parse_mode="Markdown")
     try:
-        bot.send_message(resultado['user_id'], f"✅ O teu pagamento para o jogo **{resultado['jogo_id']}** foi validado!", parse_mode="Markdown")
+        bot.send_message(resultado['user_id'], f"✅ O teu pagamento para o jogo **{resultado['jogo_id']}** foi validado com sucesso!", parse_mode="Markdown")
     except Exception:
         pass
 
