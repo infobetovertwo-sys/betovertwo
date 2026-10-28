@@ -6,7 +6,7 @@ DB_NAME = "betovertwo.db"
 
 def get_db_connection():
     conn = sqlite3.connect(DB_NAME, check_same_thread=False)
-    conn.row_factory = sqlite3.Row  # Permite aceder às colunas pelo nome (ex: row['equipas'])
+    conn.row_factory = sqlite3.Row  # Permite aceder às colunas pelo nome
     return conn
 
 def init_db():
@@ -55,7 +55,25 @@ def init_db():
     conn.commit()
     conn.close()
 
-def guardar_jogo(jogo_id, equipas, data_hora_str, data_hora_obj, odd):
+def proximo_jogo_id():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT jogo_id FROM jogos ORDER BY rowid DESC LIMIT 1")
+    ultimo = cursor.fetchone()
+    conn.close()
+    
+    if not ultimo:
+        return "J1"
+    
+    ultimo_id = ultimo["jogo_id"].upper()
+    try:
+        numero = int(ultimo_id.replace("J", ""))
+        return f"J{numero + 1}"
+    except ValueError:
+        return "J1"
+
+def guardar_jogo(equipas, data_hora_str, data_hora_obj, odd):
+    jogo_id = proximo_jogo_id()
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("""
@@ -66,6 +84,7 @@ def guardar_jogo(jogo_id, equipas, data_hora_str, data_hora_obj, odd):
     cursor.execute("UPDATE estatisticas SET valor = valor + 1 WHERE chave = 'publicados'")
     conn.commit()
     conn.close()
+    return jogo_id
 
 def obter_jogo(jogo_id):
     conn = get_db_connection()
@@ -109,7 +128,6 @@ def processar_resultado_jogo(jogo_id, res):
     
     if res == "Green":
         cursor.execute("UPDATE estatisticas SET valor = valor + 1 WHERE chave = 'greens'")
-        # Gerar referências e prazos de 24h para os participantes
         cursor.execute("SELECT user_id, user_name FROM participantes WHERE jogo_id = ?", (jogo_id,))
         participantes = cursor.fetchall()
         
