@@ -1,5 +1,6 @@
 import os
 import threading
+import time
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
@@ -271,11 +272,14 @@ def ver_estatisticas(message):
     bot.reply_to(message, texto_stats, parse_mode="Markdown")
 
 if __name__ == "__main__":
+    print("Aguardando 5 segundos para garantir que instâncias anteriores fecham...")
+    time.sleep(5)
+    
     print("A limpar conexões antigas do Telegram...")
     try:
         bot.remove_webhook()
     except Exception:
         pass
         
-    print("Bot modularizado a iniciar polling limpo...")
-    bot.infinity_polling(skip_pending=True, interval=1, timeout=20)
+    print("Bot anti-conflito a iniciar polling limpo...")
+    bot.infinity_polling(skip_pending=True, interval=2, timeout=20)
