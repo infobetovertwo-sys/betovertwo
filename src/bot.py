@@ -105,9 +105,10 @@ def publicar_prognostico(message):
 
     jogo_id = guardar_jogo(equipas, data_hora_str, data_hora_obj, odd)
 
+    # NOVO: Texto da publicação no canal com as equipas ocultas
     texto_canal = (
         f"⚽ **BetOverTwo - Prognóstico {jogo_id}**\n\n"
-        f"🏟️ **Equipas:** {equipas}\n"
+        f"🏟️ **Equipas:** Oculto 🔒\n"
         f"📅 **Data:** {data_str}\n"
         f"⏰ **Hora:** {hora_str}\n"
         f"🎯 **Mercado:** Ambas Marcam & +2.5 Golos\n"
@@ -261,35 +262,4 @@ def confirmar_pagamento(message):
         
     bot.reply_to(message, f"✅ Pagamento `{ref}` ({resultado['user_name']}) confirmado!", parse_mode="Markdown")
     try:
-        bot.send_message(resultado['user_id'], f"✅ O teu pagamento para o jogo **{resultado['jogo_id']}** foi validado!", parse_mode="Markdown")
-    except Exception:
-        pass
-
-@bot.message_handler(commands=['stats'])
-def ver_estatisticas(message):
-    pub, greens, reds = obter_estatisticas_globais()
-    total = greens + reds
-    win_rate = (greens / total * 100) if total > 0 else 0
-    
-    texto_stats = (
-        "📊 **Estatísticas Oficiais - BetOverTwo**\n\n"
-        f"• Prognósticos Publicados: `{pub}`\n"
-        f"• Greens: `{greens} 🟢`\n"
-        f"• Reds: `{reds} ❌`\n"
-        f"• **Win Rate Real:** `{win_rate:.1f}%`\n"
-        "📉 **Odd Média:** `> 1.75` (Garantido)"
-    )
-    bot.reply_to(message, texto_stats, parse_mode="Markdown")
-
-if __name__ == "__main__":
-    print("Aguardando 6 segundos para limpeza total de instâncias anteriores...")
-    time.sleep(6)
-    
-    print("A limpar webhooks e conexões pendentes do Telegram...")
-    try:
-        bot.remove_webhook()
-    except Exception:
-        pass
-        
-    print("Bot anti-conflito iniciado com sucesso. A escutar mensagens...")
-    bot.infinity_polling(skip_pending=True, interval=2, timeout=20)
+        bot.send_message(resultado['user_id'], f"✅ O teu pagamento para o jogo **{resultado['jogo_id']}
