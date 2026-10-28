@@ -1,13 +1,18 @@
 import os
-import random
 import threading
-import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# 1. Servidor web para manter o Render ativo (Obrigatório para Web Service)
+# Importar as funções da base de dados modularizada
+from db import (
+    init_db, guardar_jogo, obter_jogo, registar_clique,
+    processar_resultado_jogo, obter_dados_lista,
+    confirmar_pagamento_por_ref, obter_estatisticas_globais
+)
+
+# Servidor web para o Render
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -22,7 +27,6 @@ def run_web_server():
 web_thread = threading.Thread(target=run_web_server, daemon=True)
 web_thread.start()
 
-# 2. Configuração do Bot e Variáveis de Ambiente
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHANNEL_ID = os.environ.get("TELEGRAM_CHANNEL_ID")
 MBWAY_NUMBER = os.environ.get("MBWAY_NUMBER", "O teu número MB Way")
@@ -33,64 +37,13 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
-# 3. Inicialização da Base de Dados SQLite (Persistência contra reboots do Render)
-def init_db():
-    conn = sqlite3.connect("betovertwo.db", check_same_thread=False)
-    cursor = conn.cursor()
-    
-    # Tabela de Jogos
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS jogos (
-            jogo_id TEXT PRIMARY KEY,
-            equipas TEXT,
-            data_hora_str TEXT,
-            data_hora_obj TIMESTAMP,
-            odd TEXT,
-            status TEXT DEFAULT 'Pendente'
-        )
-    """)
-    
-    # Tabela de Cliques / Participantes por Jogo
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS participantes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            jogo_id TEXT,
-            user_id INTEGER,
-            user_name TEXT,
-            ref_codigo TEXT,
-            estado_pagamento TEXT DEFAULT 'Pendente',
-            data_limite TIMESTAMP,
-            FOREIGN KEY (jogo_id) REFERENCES jogos (jogo_id)
-        )
-    """)
-    
-    # Tabela de Estatísticas Globais
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS estatisticas (
-            chave TEXT PRIMARY KEY,
-            valor INTEGER
-        )
-    """)
-    
-    # Inicializar contadores se não existirem
-    cursor.execute("INSERT OR IGNORE INTO estatisticas (chave, valor) VALUES ('publicados', 0)")
-    cursor.execute("INSERT OR IGNORE INTO estatisticas (chave, valor) VALUES ('greens', 0)")
-    cursor.execute("INSERT OR IGNORE INTO estatisticas (chave, valor) VALUES ('reds', 0)")
-    
-    conn.commit()
-    conn.close()
-
+# Inicializar BD ao arrancar
 init_db()
 
-def get_db_connection():
-    return sqlite3.connect("betovertwo.db", check_same_thread=False)
-
-# 4. Comando Inicial
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
-    bot.reply_to(message, "🤖 O bot do **BetOverTwo** está operacional e pronto para gerir os prognósticos, cliques e pagamentos pós-Green.", parse_mode="Markdown")
+    bot.reply_to(message, "🤖 O bot do **BetOverTwo** está operacional com arquitetura modularizada.", parse_mode="Markdown")
 
-# 5. Publicar Jogo com ID (Ex: /publicar J1 | Sporting vs Benfica | 30/10/2026 20:30 | 1.85)
 @bot.message_handler(commands=['publicar'])
 def publicar_prognostico(message):
     if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
@@ -100,31 +53,18 @@ def publicar_prognostico(message):
     parts = [p.strip() for p in texto_args.split("|")]
     
     if len(parts) < 4:
-        bot.reply_to(message, "⚠️ **Uso incorreto!** Formato obrigatório:\n`/publicar J1 | Equipas | DD/MM/AAAA HH:MM | Odd`", parse_mode="Markdown")
+        bot.reply_to(message, "⚠️ **Uso incorreto!** Formato:\n`/publicar J1 | Equipas | DD/MM/AAAA HH:MM | Odd`", parse_mode="Markdown")
         return
     
-    jogo_id = parts[0].upper()
-    equipas = parts[1]
-    data_hora_str = parts[2]
-    odd = parts[3]
+    jogo_id, equipas, data_hora_str, odd = parts[0].upper(), parts[1], parts[2], parts[3]
     
     try:
         data_hora_obj = datetime.strptime(data_hora_str, "%d/%m/%Y %H:%M")
     except ValueError:
-        bot.reply_to(message, "⚠️ Formato de data e hora inválido! Usa: `DD/MM/AAAA HH:MM`", parse_mode="Markdown")
+        bot.reply_to(message, "⚠️ Formato de data inválido! Usa: `DD/MM/AAAA HH:MM`", parse_mode="Markdown")
         return
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO jogos (jogo_id, equipas, data_hora_str, data_hora_obj, odd, status)
-        VALUES (?, ?, ?, ?, ?, 'Pendente')
-    """, (jogo_id, equipas, data_hora_str, data_hora_obj, odd))
-    
-    cursor.execute("UPDATE estatisticas SET valor = valor + 1 WHERE chave = 'publicados'")
-    conn.commit()
-    conn.close()
+    guardar_jogo(jogo_id, equipas, data_hora_str, data_hora_obj, odd)
 
     texto_canal = (
         f"⚽ **BetOverTwo - Prognóstico {jogo_id}**\n\n"
@@ -139,156 +79,89 @@ def publicar_prognostico(message):
     
     destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
     bot.send_message(destino, texto_canal, parse_mode="Markdown", reply_markup=markup)
-    bot.reply_to(message, f"✅ Prognóstico `{jogo_id}` publicado com sucesso no canal!", parse_mode="Markdown")
+    bot.reply_to(message, f"✅ Prognóstico `{jogo_id}` publicado no canal!", parse_mode="Markdown")
 
-# 6. Interação quando o utilizador clica no botão de desbloqueio
 @bot.callback_query_handler(func=lambda call: call.data.startswith("desbloquear_"))
 def callback_desbloquear(call):
     jogo_id = call.data.replace("desbloquear_", "")
-    
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT equipas, data_hora_obj, odd, status FROM jogos WHERE jogo_id = ?", (jogo_id,))
-    jogo = cursor.fetchone()
+    jogo = obter_jogo(jogo_id)
     
     if not jogo:
-        bot.answer_callback_query(call.id, "❌ Este jogo já não existe ou foi removido.", show_alert=True)
-        conn.close()
+        bot.answer_callback_query(call.id, "❌ Jogo não encontrado.", show_alert=True)
         return
 
-    equipas, data_hora_obj_str, odd, status_jogo = jogo
-    data_hora_obj = datetime.strptime(data_hora_obj_str, "%Y-%m-%d %H:%M:%S")
-
+    data_hora_obj = datetime.strptime(jogo["data_hora_obj"], "%Y-%m-%d %H:%M:%S")
     if datetime.now() >= data_hora_obj:
-        bot.answer_callback_query(call.id, "❌ Este prognóstico já expirou porque o jogo já começou!", show_alert=True)
-        conn.close()
+        bot.answer_callback_query(call.id, "❌ Este prognóstico já expirou!", show_alert=True)
         return
 
     user_id = call.from_user.id
     user_name = call.from_user.first_name or "Utilizador"
+    
+    registar_clique(jogo_id, user_id, user_name)
 
-    # Verificar se já desbloqueou este jogo
-    cursor.execute("SELECT id FROM participantes WHERE jogo_id = ? AND user_id = ?", (jogo_id, user_id))
-    ja_registado = cursor.fetchone()
-
-    if not ja_registado:
-        cursor.execute("""
-            INSERT INTO participantes (jogo_id, user_id, user_name, ref_codigo, estado_pagamento)
-            VALUES (?, ?, ?, '', 'Aguardando Resultado')
-        """, (jogo_id, user_id, user_name))
-        conn.commit()
-
-    conn.close()
-
-    # Enviar detalhes em privado com aviso dos 15 minutos e compromisso
     texto_privado = (
-        f"🔓 **Prognóstico Desbloqueado com Sucesso ({jogo_id})**\n\n"
-        f"⚽ **Equipas:** {equipas}\n"
+        f"🔓 **Prognóstico Desbloqueado ({jogo_id})**\n\n"
+        f"⚽ **Equipas:** {jogo['equipas']}\n"
         f"🎯 **Mercado:** Ambas Marcam & +2.5 Golos\n"
-        f"📉 **Odd:** `{odd}`\n\n"
-        "📌 *Nota de Compromisso:* Ao desbloquear, assumes o compromisso de honrar **2€ via MB Way** apenas se o jogo der **Green**. Se der Red, não pagas absolutamente nada!\n"
-        "⏱️ *Garantia:* O desbloqueio demorou menos de 15m. Bons lucros!"
+        f"📉 **Odd:** `{jogo['odd']}`\n\n"
+        "📌 *Nota:* Assumes o compromisso de honrar **2€ via MB Way** apenas se der **Green**."
     )
 
     try:
         bot.send_message(user_id, texto_privado, parse_mode="Markdown")
-        bot.answer_callback_query(call.id, "Detalhes enviados para o teu chat privado!")
+        bot.answer_callback_query(call.id, "Detalhes enviados em privado!")
     except Exception:
-        bot.answer_callback_query(call.id, "Por favor, inicia primeiro uma conversa privada com o bot.", show_alert=True)
+        bot.answer_callback_query(call.id, "Inicia primeiro chat privado com o bot.", show_alert=True)
 
-# 7. Registar Resultado do Jogo (/resultado J1 | 2-1 | Green)
 @bot.message_handler(commands=['resultado'])
 def registar_resultado(message):
     if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
         return
 
-    texto_args = message.text.replace("/resultado", "").strip()
-    parts = [p.strip() for p in texto_args.split("|")]
-    
+    parts = [p.strip() for p in message.text.replace("/resultado", "").split("|")]
     if len(parts) < 3:
-        bot.reply_to(message, "⚠️ **Uso incorreto!** Formato:\n`/resultado J1 | 2-1 | Green` (ou Red)", parse_mode="Markdown")
+        bot.reply_to(message, "⚠️ Formato: `/resultado J1 | 2-1 | Green`", parse_mode="Markdown")
         return
     
-    jogo_id = parts[0].upper()
-    placar = parts[1]
-    res = parts[2].capitalize()
+    jogo_id, placar, res = parts[0].upper(), parts[1], parts[2].capitalize()
     
     if res not in ["Green", "Red"]:
-        bot.reply_to(message, "⚠️ O estado final tem de ser obrigatoriamente `Green` ou `Red`.", parse_mode="Markdown")
+        bot.reply_to(message, "⚠️ O estado tem de ser `Green` ou `Red`.", parse_mode="Markdown")
         return
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT equipas, odd FROM jogos WHERE jogo_id = ?", (jogo_id,))
-    jogo = cursor.fetchone()
-    
-    if not jogo:
+    resultado_processamento = processar_resultado_jogo(jogo_id, res)
+    if not resultado_processamento:
         bot.reply_to(message, f"❌ Jogo `{jogo_id}` não encontrado.", parse_mode="Markdown")
-        conn.close()
         return
 
-    equipas, odd = jogo
-    cursor.execute("UPDATE jogos SET status = ? WHERE jogo_id = ?", (res, jogo_id))
-    
-    if res == "Green":
-        cursor.execute("UPDATE estatisticas SET valor = valor + 1 WHERE chave = 'greens'")
-        emoji = "✅🟢"
-    else:
-        cursor.execute("UPDATE estatisticas SET valor = valor + 1 WHERE chave = 'reds'")
-        emoji = "❌🔴"
-        
-    conn.commit()
-
-    # Publicar no Canal
+    emoji = "✅🟢" if res == "Green" else "❌🔴"
     texto_res = (
-        f"📊 **Resultado Final - BetOverTwo ({jogo_id})**\n\n"
-        f"⚽ **Jogo:** {equipas}\n"
+        f"📊 **Resultado Final ({jogo_id})**\n\n"
+        f"⚽ **Equipas:** {resultado_processamento['equipas']}\n"
         f"📌 **Placar:** {placar}\n"
-        f"🎯 **Mercado:** Ambas Marcam & +2.5 Golos\n"
-        f"📉 **Odd:** `{odd}`\n"
+        f"📉 **Odd:** `{resultado_processamento['odd']}`\n"
         f"👉 **Status:** {emoji} **{res.upper()}**"
     )
     
     destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
     bot.send_message(destino, texto_res, parse_mode="Markdown")
 
-    # Se for Green, gerar referências e notificar participantes para pagamento em 24h
     if res == "Green":
-        cursor.execute("SELECT user_id, user_name FROM participantes WHERE jogo_id = ?", (jogo_id,))
-        participantes = cursor.fetchall()
-        
-        data_limite = datetime.now() + timedelta(hours=24)
-        
-        for p in participantes:
-            u_id, u_name = p
-            ref_codigo = f"{jogo_id}-{random.randint(1000, 9999)}"
-            
-            cursor.execute("""
-                UPDATE participantes 
-                SET ref_codigo = ?, estado_pagamento = 'Pendente', data_limite = ? 
-                WHERE jogo_id = ? AND user_id = ?
-            """, (ref_codigo, data_limite, jogo_id, u_id))
-            
+        for u_id, ref_codigo in resultado_processamento['cobrancas']:
             msg_cobranca = (
                 f"🎉 O Jogo **{jogo_id}** deu **GREEN!** 🟢\n\n"
-                f"Para manteres o acesso vitalício ao canal BetOverTwo, efetua o pagamento de **2€** via MB Way para o número `{MBWAY_NUMBER}`.\n\n"
-                f"🔑 **Referência Única:** `{ref_codigo}`\n"
-                f"⏳ **Prazo limite:** 24 horas.\n\n"
-                "*A ausência de pagamento após o prazo resulta em expulsão automática.*"
+                f"Efetua o pagamento de **2€** via MB Way (`{MBWAY_NUMBER}`).\n"
+                f"🔑 **Referência:** `{ref_codigo}` (Prazo: 24h)"
             )
             try:
                 bot.send_message(u_id, msg_cobranca, parse_mode="Markdown")
             except Exception:
                 pass
-                
-        conn.commit()
-        bot.reply_to(message, f"✅ Resultado `{jogo_id}` registado como GREEN! Notificações de pagamento enviadas aos participantes.", parse_mode="Markdown")
+        bot.reply_to(message, f"✅ Green registado para `{jogo_id}` e cobranças enviadas!", parse_mode="Markdown")
     else:
-        bot.reply_to(message, f"✅ Resultado `{jogo_id}` registado como RED. Nenhuma cobrança gerada.", parse_mode="Markdown")
+        bot.reply_to(message, f"✅ Red registado para `{jogo_id}`.", parse_mode="Markdown")
 
-    conn.close()
-
-# 8. Comando de Gestão de Lista (/lista J1)
 @bot.message_handler(commands=['lista'])
 def ver_lista_jogo(message):
     if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
@@ -296,45 +169,34 @@ def ver_lista_jogo(message):
 
     args = message.text.split()
     if len(args) < 2:
-        bot.reply_to(message, "⚠️ Uso correto: `/lista [ID_do_Jogo]` (ex: `/lista J1`)", parse_mode="Markdown")
+        bot.reply_to(message, "⚠️ Uso correto: `/lista [ID]` (ex: `/lista J1`)", parse_mode="Markdown")
         return
         
     jogo_id = args[1].upper()
+    dados = obter_dados_lista(jogo_id)
     
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT equipas, odd, status FROM jogos WHERE jogo_id = ?", (jogo_id,))
-    jogo = cursor.fetchone()
-    
-    if not jogo:
+    if not dados:
         bot.reply_to(message, f"❌ Jogo `{jogo_id}` não encontrado.")
-        conn.close()
         return
 
-    equipas, odd, status = jogo
-    
-    cursor.execute("SELECT ref_codigo, user_name, user_id, estado_pagamento, data_limite FROM participantes WHERE jogo_id = ?", (jogo_id,))
-    parts = cursor.fetchall()
-    conn.close()
-    
-    pendentes = [p for p in parts if p[3] == 'Pendente']
-    pagos = [p for p in parts if p[3] == 'Pago']
+    jogo, participantes = dados
+    pendentes = [p for p in participantes if p["estado_pagamento"] == 'Pendente']
+    pagos = [p for p in participantes if p["estado_pagamento"] == 'Pago']
     
     texto = (
         f"📊 **Estado do Jogo: {jogo_id}**\n"
-        f"⚽ *{equipas}* (Odd: `{odd}` | Status: **{status}**)\n\n"
+        f"⚽ *{jogo['equipas']}* (Odd: `{jogo['odd']}` | Status: **{jogo['status']}**)\n\n"
         f"⏳ **Pendentes ({len(pendentes)}):**\n"
     )
     for p in pendentes:
-        texto += f"• `Ref: {p[0]}` — **{p[1]}** (ID: `{p[2]}`)\n"
+        texto += f"• `Ref: {p['ref_codigo']}` — **{p['user_name']}**\n"
         
     texto += f"\n✅ **Pagos ({len(pagos)}):**\n"
     for p in pagos:
-        texto += f"• `Ref: {p[0]}` — **{p[1]}**\n"
+        texto += f"• `Ref: {p['ref_codigo']}` — **{p['user_name']}**\n"
         
     bot.reply_to(message, texto, parse_mode="Markdown")
 
-# 9. Comando para Confirmar Pagamento (/pago J1-4821 ou CÓDIGO)
 @bot.message_handler(commands=['pago'])
 def confirmar_pagamento(message):
     if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
@@ -346,65 +208,38 @@ def confirmar_pagamento(message):
         return
         
     ref = args[1].upper()
+    resultado = confirmar_pagamento_por_ref(ref)
     
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT user_id, user_name, jogo_id, estado_pagamento FROM participantes WHERE ref_codigo = ?", (ref,))
-    reg = cursor.fetchone()
-    
-    if not reg:
+    if not resultado:
         bot.reply_to(message, f"❌ Referência `{ref}` não encontrada.")
-        conn.close()
         return
         
-    user_id, user_name, jogo_id, estado = reg
-    
-    if estado == 'Pago':
+    if resultado["status"] == "ja_pago":
         bot.reply_to(message, f"⚠️ A referência `{ref}` já constava como paga.")
-        conn.close()
         return
-
-    cursor.execute("UPDATE participantes SET estado_pagamento = 'Pago' WHERE ref_codigo = ?", (ref,))
-    conn.commit()
-    conn.close()
-    
-    bot.reply_to(message, f"✅ Pagamento `{ref}` ({user_name}) confirmado com sucesso!", parse_mode="Markdown")
+        
+    bot.reply_to(message, f"✅ Pagamento `{ref}` ({resultado['user_name']}) confirmado!", parse_mode="Markdown")
     try:
-        bot.send_message(user_id, f"✅ O teu pagamento para o jogo **{jogo_id}** foi validado com sucesso! Obrigado e bons lucros.", parse_mode="Markdown")
+        bot.send_message(resultado['user_id'], f"✅ O teu pagamento para o jogo **{resultado['jogo_id']}** foi validado!", parse_mode="Markdown")
     except Exception:
         pass
 
-# 10. Comando de Estatísticas Globais (/stats)
 @bot.message_handler(commands=['stats'])
 def ver_estatisticas(message):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT valor FROM estatisticas WHERE chave = 'publicados'")
-    pub = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT valor FROM estatisticas WHERE chave = 'greens'")
-    greens = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT valor FROM estatisticas WHERE chave = 'reds'")
-    reds = cursor.fetchone()[0]
-    
-    conn.close()
-    
-    total_resolvidos = greens + reds
-    win_rate = (greens / total_resolvidos * 100) if total_resolvidos > 0 else 0
+    pub, greens, reds = obter_estatisticas_globais()
+    total = greens + reds
+    win_rate = (greens / total * 100) if total > 0 else 0
     
     texto_stats = (
         "📊 **Estatísticas Oficiais - BetOverTwo**\n\n"
         f"• Prognósticos Publicados: `{pub}`\n"
-        f"• Greens (Acertos): `{greens} 🟢`\n"
-        f"• Reds (Falhas): `{reds} ❌`\n"
+        f"• Greens: `{greens} 🟢`\n"
+        f"• Reds: `{reds} ❌`\n"
         f"• **Win Rate Real:** `{win_rate:.1f}%`\n"
-        "📉 **Odd Média:** `> 1.75` (Garantido)\n\n"
-        "✨ *Transparência e rigor diário ao serviço da comunidade.*"
+        "📉 **Odd Média:** `> 1.75` (Garantido)"
     )
     bot.reply_to(message, texto_stats, parse_mode="Markdown")
 
 if __name__ == "__main__":
-    print("Bot com suporte a SQLite e IDs de Jogo a iniciar polling...")
+    print("Bot modularizado a iniciar polling...")
     bot.infinity_polling()
