@@ -56,8 +56,9 @@ def publicar_prognostico(message):
     markup.add(InlineKeyboardButton("🔓 Desbloquear por 2€ (MB Way)", callback_data="desbloquear_prognostico"))
     
     # Enviar para o canal se configurado, senão responde no chat atual
-destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
-bot.send_message(destino, texto_prognostico, parse_mode="Markdown", reply_markup=markup)
+    destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
+    bot.send_message(destino, texto_prognostico, parse_mode="Markdown", reply_markup=markup)
+    
     if CHANNEL_ID and message.chat.id != int(CHANNEL_ID):
         bot.reply_to(message, "✅ Prognóstico publicado com sucesso no canal!")
 
@@ -101,7 +102,6 @@ def callback_desbloquear(call):
 # 6. Comando de Aprovação do Admin (`/aprovar CÓDIGO`)
 @bot.message_handler(commands=['aprovar'])
 def aprovar_pagamento(message):
-    # Verificar se quem envia é o admin (ou permitir a ti através do chat)
     args = message.text.split()
     if len(args) < 2:
         bot.reply_to(message, "⚠️ Uso correto: `/aprovar [código_de_referência]`", parse_mode="Markdown")
