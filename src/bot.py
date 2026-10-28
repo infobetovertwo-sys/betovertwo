@@ -77,7 +77,7 @@ def apagar_jogo_comando(message):
     else:
         bot.reply_to(message, f"❌ Jogo `{jogo_id}` não encontrado.", parse_mode="Markdown")
 
-# Comando para publicar as Regras e Estatísticas fixadas no canal (com o aviso claro reforçado)
+# Comando para publicar as Regras e Estatísticas fixadas no canal (com negritos e PT-PT rigoroso)
 @bot.message_handler(commands=['regras'])
 def publicar_regras(message):
     if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
@@ -93,10 +93,10 @@ def publicar_regras(message):
         "• Publicamos prognósticos exclusivos no mercado **Ambas Marcam & +2.5 Golos**.\n"
         "• O jogo é publicado oculto. Podes desbloquear os detalhes clicando no botão do jogo.\n\n"
         "⚖️ **Regras de Ouro & Compromisso:**\n"
-        "1️⃣ O acesso para visualizar os prognósticos é gratuito.\n"
+        "1️⃣ O acesso para visualizar os prognósticos é **totalmente gratuito**.\n"
         "2️⃣ **ATENÇÃO:** Ao clicares no botão para desbloquear e ver o prognóstico, **assumes o compromisso obrigatório de pagar 2€ via MB Way** caso esse prognóstico dê **GREEN** (ganho).\n"
-        "3️⃣ Após um Green, recebes a referência e tens **24 horas** para efetuar o pagamento.\n"
-        "4️⃣ O incumprimento do pagamento após um Green resulta em banimento e exclusão permanente do canal.\n\n"
+        "3️⃣ Após um Green, recebes a referência e dispões de um prazo máximo de **24 horas** para efetuar o pagamento.\n"
+        "4️⃣ O **incumprimento do pagamento** após um Green resulta em **exclusão permanente** do canal.\n\n"
         "📊 **Estatísticas Oficiais:**\n"
         f"• Prognósticos: `{pub}`\n"
         f"• Greens: `{greens} 🟢` | Reds: `{reds} ❌`\n"
@@ -115,7 +115,7 @@ def publicar_regras(message):
     except Exception:
         pass
 
-    bot.reply_to(message, "✅ Mensagem de Regras atualizada, publicada e fixada no canal!", parse_mode="Markdown")
+    bot.reply_to(message, "✅ Mensagem de Regras atualizada com negritos e fixada no canal!", parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data == "aceitar_regras")
 def callback_aceitar_regras(call):
@@ -124,7 +124,7 @@ def callback_aceitar_regras(call):
     texto_privado = (
         f"👋 Olá **{user_name}**, obrigado por aceitares as regras do **BetOverTwo**!\n\n"
         "Estás oficialmente autorizado a acompanhar os prognósticos.\n"
-        "⚠️ Lembra-te: **Sempre que clicares para desbloquear um jogo e este der Green, o pagamento de 2€ via MB Way é obrigatório.**\n\n"
+        "⚠️ **Recorda-te:** Sempre que clicares para desbloquear um jogo e este der Green, o **pagamento de 2€ via MB Way é obrigatório**.\n\n"
         "Bons lucros e excelentes apostas! 🟢"
     )
 
@@ -249,7 +249,7 @@ def registar_resultado(message):
             msg_cobranca = (
                 f"🎉 O Jogo **{jogo_id}** deu **GREEN!** 🟢\n\n"
                 f"Conforme as regras aceites, efetua o pagamento de **2€** via MB Way (`{MBWAY_NUMBER}`).\n"
-                f"🔑 **Referência:** `{ref_codigo}` (Prazo: 24h)"
+                f"🔑 **Referência:** `{ref_codigo}` (Prazo máximo: 24h)"
             )
             try:
                 bot.send_message(u_id, msg_cobranca, parse_mode="Markdown")
