@@ -114,7 +114,7 @@ def publicar_regras(message):
     except Exception:
         pass
 
-    bot.reply_to(message, "✅ Mensagem de Regras atualizada com parágrafos e fixada no canal!", parse_mode="Markdown")
+    bot.reply_to(message, "✅ Mensagem de Regras publicada e fixada no canal com sucesso!", parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data == "aceitar_regras")
 def callback_aceitar_regras(call):
@@ -174,8 +174,12 @@ def publicar_prognostico(message):
     markup.add(InlineKeyboardButton(f"🔓 Desbloquear (Aceito pagar 2€ se der Green) ({jogo_id})", callback_data=f"desbloquear_{jogo_id}"))
     
     destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
-    bot.send_message(destino, texto_canal, parse_mode="Markdown", reply_markup=markup)
-    bot.reply_to(message, f"✅ Prognóstico `{jogo_id}` gerado e publicado automaticamente no canal!", parse_mode="Markdown")
+    
+    try:
+        bot.send_message(destino, texto_canal, parse_mode="Markdown", reply_markup=markup)
+        bot.reply_to(message, f"✅ Prognóstico `{jogo_id}` publicado com sucesso no canal!", parse_mode="Markdown")
+    except Exception as e:
+        bot.reply_to(message, f"❌ Erro ao publicar no canal. Verifica se o bot é administrador.\nDetalhe: {e}", parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("desbloquear_"))
 def callback_desbloquear(call):
