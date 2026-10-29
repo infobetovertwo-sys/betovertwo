@@ -77,7 +77,7 @@ def apagar_jogo_comando(message):
     else:
         bot.reply_to(message, f"❌ Jogo `{jogo_id}` não encontrado.", parse_mode="Markdown")
 
-# Comando para publicar as Regras e Estatísticas fixadas no canal (com negritos corrigidos)
+# Comando para publicar as Regras e Estatísticas com parágrafos perfeitamente espaçados
 @bot.message_handler(commands=['regras'])
 def publicar_regras(message):
     if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
@@ -88,24 +88,23 @@ def publicar_regras(message):
     win_rate = (greens / total * 100) if total > 0 else 0
 
     texto_regras = (
-        "📌 *BEM-VINDO AO BETOVERTWO - REGRAS & ESTATÍSTICAS* 📊\n\n"
-        "🎯 *Como Funciona:*\n"
-        "• Publicamos prognósticos exclusivos no mercado *Ambas Marcam & +2.5 Golos*.\n"
-        "• O jogo é publicado oculto. Podes desbloquear os detalhes clicando no botão do jogo.\n\n"
-        "⚖️ *Regras de Ouro & Compromisso:*\n"
-        "1️⃣ O acesso para visualizar os prognósticos é *totalmente gratuito*.\n"
-        "2️⃣ *ATENÇÃO:* Ao clicares no botão para desbloquear e ver o prognóstico, *assumes o compromisso obrigatório de pagar 2€ via MB Way* caso esse prognóstico dê *GREEN* (ganho).\n"
-        "3️⃣ Após um Green, recebes a referência e dispões de um prazo máximo de *24 horas* para efetuar o pagamento.\n"
-        "4️⃣ O *incumprimento do pagamento* após um Green resulta em *exclusão permanente* do canal.\n\n"
+        "📌 *BEM-VINDO AO BETOVERTWO*\n\n"
+        "🎯 *Como funciona?*\n"
+        "Publicamos prognósticos exclusivos no mercado *Ambas Marcam & +2.5 Golos*. Cada jogo é publicado oculto no canal e podes ver os detalhes de forma totalmente *gratuita*.\n\n"
+        "⚖️ *Regras e Compromisso:*\n\n"
+        "1️⃣ O acesso aos prognósticos é *totalmente gratuito*.\n\n"
+        "2️⃣ *ATENÇÃO:* Ao clicares para desbloquear um jogo, *assumes o compromisso obrigatório de pagar 2€ via MB Way* caso o prognóstico dê *GREEN* (ganho).\n\n"
+        "3️⃣ Se der Green, recebes a referência de pagamento e tens um prazo máximo de *24 horas* para liquidar.\n\n"
+        "4️⃣ O incumprimento do pagamento resulta na *expulsão permanente* do canal.\n\n"
         "📊 *Estatísticas Oficiais:*\n"
-        f"• Prognósticos: `{pub}`\n"
+        f"• Jogos Publicados: `{pub}`\n"
         f"• Greens: `{greens} 🟢` | Reds: `{reds} ❌`\n"
         f"• *Win Rate:* `{win_rate:.1f}%`\n\n"
-        "👇 _Para aceitar estritamente estas regras e desbloquear o acesso ao canal, clica no botão abaixo:_"
+        "_👇 Para aceitar as regras e desbloquear o acesso ao canal, clica no botão abaixo:_"
     )
 
     markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("✅ Li, Compreendi e Aceito as Regras", callback_data="aceitar_regras"))
+    markup.add(InlineKeyboardButton("✅ Li e Aceito as Regras", callback_data="aceitar_regras"))
 
     destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
     msg_enviada = bot.send_message(destino, texto_regras, parse_mode="Markdown", reply_markup=markup)
@@ -115,7 +114,7 @@ def publicar_regras(message):
     except Exception:
         pass
 
-    bot.reply_to(message, "✅ Mensagem de Regras atualizada com negritos rigorosos e fixada no canal!", parse_mode="Markdown")
+    bot.reply_to(message, "✅ Mensagem de Regras atualizada com parágrafos e fixada no canal!", parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data == "aceitar_regras")
 def callback_aceitar_regras(call):
@@ -123,9 +122,9 @@ def callback_aceitar_regras(call):
     
     texto_privado = (
         f"👋 Olá *{user_name}*, obrigado por aceitares as regras do *BetOverTwo*!\n\n"
-        "Estás oficialmente autorizado a acompanhar os prognósticos.\n"
-        "⚠️ *Recorda-te:* Sempre que clicares para desbloquear um jogo e este der Green, o *pagamento de 2€ via MB Way é obrigatório*.\n\n"
-        "Bons lucros e excelentes apostas! 🟢"
+        "Estás oficialmente autorizado a acompanhar os prognósticos.\n\n"
+        "⚠️ *Lembra-te:* Sempre que clicares para desbloquear um jogo e este der Green, o *pagamento de 2€ via MB Way é obrigatório*.\n\n"
+        "Bons lucros e boas apostas! 🟢"
     )
 
     try:
