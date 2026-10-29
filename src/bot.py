@@ -42,12 +42,39 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
-# Inicializar BD ao arrancar
+# Inicializar BD ao arrancar (Preserva os dados existentes)
 init_db()
 
 @bot.message_handler(commands=['start'])
 def send_welcome(message):
     bot.reply_to(message, "🤖 O bot do **BetOverTwo** está operacional.", parse_mode="Markdown")
+
+# Comando de Ajuda para o Administrador
+@bot.message_handler(commands=['ajuda'])
+def mostrar_ajuda(message):
+    if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
+        return
+
+    texto_ajuda = (
+        "🛠️ *Painel de Ajuda - Comandos de Admin*\n\n"
+        "📌 *1. Publicar Jogo:*\n"
+        "`/publicar Equipas | DD/MM/AAAA HH:MM | Odd`\n"
+        "_(Ex: /publicar Porto vs Sporting | 30/10/2026 21:00 | 1.85)_\n\n"
+        "📌 *2. Publicar Regras no Canal:*\n"
+        "`/regras`\n\n"
+        "📌 *3. Registar Resultado:*\n"
+        "`/resultado [ID] | [Placar] | Green` (ou `Red`)\n"
+        "_(Ex: /resultado J1 | 2-1 | Green)_\n\n"
+        "📌 *4. Consultar Lista de Apostadores:*\n"
+        "`/lista [ID]` (Ex: `/lista J1`)\n\n"
+        "📌 *5. Confirmar Pagamento MB Way:*\n"
+        "`/pago [Referência]` (Ex: `/pago J1-4821`)\n\n"
+        "📌 *6. Apagar um Jogo Específico:*\n"
+        "`/apagar [ID]` (Ex: `/apagar J1`)\n\n"
+        "📌 *7. Ver Estatísticas Globais:*\n"
+        "`/stats`"
+    )
+    bot.reply_to(message, texto_ajuda, parse_mode="Markdown")
 
 # Comando Secreto de Reset (Apenas Admin)
 @bot.message_handler(commands=['reset'])
