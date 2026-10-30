@@ -10,7 +10,7 @@ from db import (
     init_db, guardar_jogo, obter_jogo, registar_clique,
     processar_resultado_jogo, obter_dados_lista,
     confirmar_pagamento_por_ref, obter_estatisticas_globais,
-    reset_database, apagar_jogo_por_id
+    reset_database, apagar_jogo_por_id, obter_todos_os_jogos
 )
 
 # Servidor web para manter o Render ativo
@@ -42,7 +42,7 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
-# Inicializar BD ao arrancar (Preserva os dados existentes)
+# Inicializar BD ao arrancar
 init_db()
 
 @bot.message_handler(commands=['start'])
@@ -59,20 +59,40 @@ def mostrar_ajuda(message):
         "🛠️ *Painel de Ajuda - Comandos de Admin*\n\n"
         "📌 *1. Publicar Jogo:*\n"
         "`/publicar Equipas | DD/MM/AAAA HH:MM | Odd`\n\n"
-        "📌 *2. Publicar Regras no Canal:*\n"
+        "📌 *2. Listar Todos os Jogos (Estados):*\n"
+        "`/jogos`\n\n"
+        "📌 *3. Publicar Regras no Canal:*\n"
         "`/regras`\n\n"
-        "📌 *3. Registar Resultado:*\n"
+        "📌 *4. Registar Resultado:*\n"
         "`/resultado [ID] | [Placar] | Green` (ou `Red`)\n\n"
-        "📌 *4. Consultar Lista de Apostadores:*\n"
+        "📌 *5. Consultar Lista de Apostadores de um Jogo:*\n"
         "`/lista [ID]` (Ex: `/lista J1`)\n\n"
-        "📌 *5. Confirmar Pagamento MB Way:*\n"
+        "📌 *6. Confirmar Pagamento MB Way:*\n"
         "`/pago [Referência]` (Ex: `/pago J1-4821`)\n\n"
-        "📌 *6. Apagar um Jogo Específico:*\n"
+        "📌 *7. Apagar um Jogo Específico:*\n"
         "`/apagar [ID]` (Ex: `/apagar J1`)\n\n"
-        "📌 *7. Ver Estatísticas Globais:*\n"
+        "📌 *8. Ver Estatísticas Globais:*\n"
         "`/stats`"
     )
     bot.reply_to(message, texto_ajuda, parse_mode="Markdown")
+
+# Novo Comando: Listar todos os jogos e respetivos estados
+@bot.message_handler(commands=['jogos'])
+def listar_todos_jogos(message):
+    if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
+        return
+
+    jogos = obter_todos_os_jogos()
+    if not jogos:
+        bot.reply_to(message, "⚠️ Não existem jogos registados na base de dados.", parse_mode="Markdown")
+        return
+
+    texto = "📋 *Lista de Jogos Registados:*\n\n"
+    for j in jogos:
+        status_emoji = "⏳ Pendente" if j["status"] == "Pendente" else ("🟢 Green" if j["status"] == "Green" else "❌ Red")
+        texto += f"• `{j['id']}` — *{j['equipas']}* (Odd: `{j['odd']}`) — Status: *{status_emoji}*\n"
+
+    bot.reply_to(message, texto, parse_mode="Markdown")
 
 # Comando Secreto de Reset (Apenas Admin)
 @bot.message_handler(commands=['reset'])
@@ -147,7 +167,7 @@ def callback_aceitar_regras(call):
     texto_privado = (
         f"👋 Olá *{user_name}*, obrigado por aceitares as regras do *BetOverTwo*!\n\n"
         "Estás oficialmente autorizado a acompanhar os prognósticos.\n\n"
-        "⚠️ *Lembra-te:* Sempre que clicares para desbloquear um jogo e este der Green, o *pagamento de 2€ via MB Way é obrigatório*.\n\n"
+        "⚠️ *Lembra-te:* Sempre que clicares para desbloquear um jogo e este der Green, o *pagamento de 2€ via MB Way* é obrigatório*.\n\n"
         "Bons lucros e boas apostas! 🟢"
     )
 
@@ -250,7 +270,7 @@ def registar_resultado(message):
     
     jogo_id = parts[0].upper()
     placar = parts[1]
-    res_input = parts[2].capitalize() # Torna a primeira letra maiúscula (Green ou Red)
+    res_input = parts[2].capitalize()
     
     if res_input not in ["Green", "Red"]:
         bot.reply_to(message, "⚠️ O estado tem de ser estritamente `Green` ou `Red`.", parse_mode="Markdown")
