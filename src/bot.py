@@ -58,13 +58,11 @@ def mostrar_ajuda(message):
     texto_ajuda = (
         "🛠️ *Painel de Ajuda - Comandos de Admin*\n\n"
         "📌 *1. Publicar Jogo:*\n"
-        "`/publicar Equipas | DD/MM/AAAA HH:MM | Odd`\n"
-        "_(Ex: /publicar Porto vs Sporting | 30/10/2026 21:00 | 1.85)_\n\n"
+        "`/publicar Equipas | DD/MM/AAAA HH:MM | Odd`\n\n"
         "📌 *2. Publicar Regras no Canal:*\n"
         "`/regras`\n\n"
         "📌 *3. Registar Resultado:*\n"
-        "`/resultado [ID] | [Placar] | Green` (ou `Red`)\n"
-        "_(Ex: /resultado J1 | 2-1 | Green)_\n\n"
+        "`/resultado [ID] | [Placar] | Green` (ou `Red`)\n\n"
         "📌 *4. Consultar Lista de Apostadores:*\n"
         "`/lista [ID]` (Ex: `/lista J1`)\n\n"
         "📌 *5. Confirmar Pagamento MB Way:*\n"
@@ -104,7 +102,6 @@ def apagar_jogo_comando(message):
     else:
         bot.reply_to(message, f"❌ Jogo `{jogo_id}` não encontrado.", parse_mode="Markdown")
 
-# Comando para publicar as Regras e Estatísticas com parágrafos perfeitamente espaçados
 @bot.message_handler(commands=['regras'])
 def publicar_regras(message):
     if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
@@ -248,33 +245,35 @@ def registar_resultado(message):
 
     parts = [p.strip() for p in message.text.replace("/resultado", "").split("|")]
     if len(parts) < 3:
-        bot.reply_to(message, "⚠️ Formato: `/resultado J1 | 2-1 | Green`", parse_mode="Markdown")
+        bot.reply_to(message, "⚠️ Formato correto: `/resultado J1 | 2-1 | Green` (ou `Red`)", parse_mode="Markdown")
         return
     
-    jogo_id, placar, res = parts[0].upper(), parts[1], parts[2].capitalize()
+    jogo_id = parts[0].upper()
+    placar = parts[1]
+    res_input = parts[2].capitalize() # Torna a primeira letra maiúscula (Green ou Red)
     
-    if res not in ["Green", "Red"]:
-        bot.reply_to(message, "⚠️ O estado tem de ser `Green` ou `Red`.", parse_mode="Markdown")
+    if res_input not in ["Green", "Red"]:
+        bot.reply_to(message, "⚠️ O estado tem de ser estritamente `Green` ou `Red`.", parse_mode="Markdown")
         return
 
-    resultado_processamento = processar_resultado_jogo(jogo_id, res)
+    resultado_processamento = processar_resultado_jogo(jogo_id, res_input)
     if not resultado_processamento:
-        bot.reply_to(message, f"❌ Jogo `{jogo_id}` não encontrado.", parse_mode="Markdown")
+        bot.reply_to(message, f"❌ Jogo `{jogo_id}` não encontrado na base de dados.", parse_mode="Markdown")
         return
 
-    emoji = "✅🟢" if res == "Green" else "❌🔴"
+    emoji = "✅🟢" if res_input == "Green" else "❌🔴"
     texto_res = (
         f"📊 *Resultado Final ({jogo_id})*\n\n"
         f"⚽ *Equipas:* {resultado_processamento['equipas']}\n"
         f"📌 *Placar:* {placar}\n"
         f"📉 *Odd:* `{resultado_processamento['odd']}`\n"
-        f"👉 *Status:* {emoji} *{res.upper()}*"
+        f"👉 *Status:* {emoji} *{res_input.upper()}*"
     )
     
     destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
     bot.send_message(destino, texto_res, parse_mode="Markdown")
 
-    if res == "Green":
+    if res_input == "Green":
         for u_id, ref_codigo in resultado_processamento['cobrancas']:
             msg_cobranca = (
                 f"🎉 O Jogo *{jogo_id}* deu *GREEN!* 🟢\n\n"
@@ -287,7 +286,7 @@ def registar_resultado(message):
                 pass
         bot.reply_to(message, f"✅ Green registado para `{jogo_id}` e cobranças enviadas!", parse_mode="Markdown")
     else:
-        bot.reply_to(message, f"✅ Red registado para `{jogo_id}`.", parse_mode="Markdown")
+        bot.reply_to(message, f"✅ Red registado para `{jogo_id}` com sucesso!", parse_mode="Markdown")
 
 @bot.message_handler(commands=['lista'])
 def ver_lista_jogo(message):
