@@ -1,247 +1,236 @@
 import sqlite3
-from datetime import datetime, timedelta
 import random
+from datetime import datetime
 
 DB_NAME = "betovertwo.db"
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_NAME, check_same_thread=False)
-    conn.row_factory = sqlite3.Row  # Permite aceder às colunas pelo nome
-    return conn
-
 def init_db():
-    conn = get_db_connection()
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
     # Tabela de Jogos
-    cursor.execute("""
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS jogos (
-            jogo_id TEXT PRIMARY KEY,
+            id TEXT PRIMARY KEY,
             equipas TEXT,
             data_hora_str TEXT,
-            data_hora_obj TIMESTAMP,
+            data_hora_obj TEXT,
             odd TEXT,
             status TEXT DEFAULT 'Pendente'
         )
-    """)
+    ''')
     
-    # Tabela de Cliques / Participantes por Jogo
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS participantes (
+    # Tabela de Cliques / Participantes
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS cliques (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             jogo_id TEXT,
             user_id INTEGER,
             user_name TEXT,
             ref_codigo TEXT,
             estado_pagamento TEXT DEFAULT 'Pendente',
-            data_limite TIMESTAMP,
-            FOREIGN KEY (jogo_id) REFERENCES jogos (jogo_id)
+            UNIQUE(jogo_id, user_id)
         )
-    """)
-    
-    # Tabela de Estatísticas Globais
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS estatisticas (
-            chave TEXT PRIMARY KEY,
-            valor INTEGER
-        )
-    """)
-    
-    # Inicializar contadores se não existirem
-    cursor.execute("INSERT OR IGNORE INTO estatisticas (chave, valor) VALUES ('publicados', 0)")
-    cursor.execute("INSERT OR IGNORE INTO estatisticas (chave, valor) VALUES ('greens', 0)")
-    cursor.execute("INSERT OR IGNORE INTO estatisticas (chave, valor) VALUES ('reds', 0)")
+    ''')
     
     conn.commit()
     conn.close()
 
 def reset_database():
-    """Apaga todos os dados e reinicia a base de dados do zero."""
-    conn = get_db_connection()
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("DROP TABLE IF EXISTS participantes")
+    cursor.execute("DROP TABLE IF EXISTS cliques")
     cursor.execute("DROP TABLE IF EXISTS jogos")
-    cursor.execute("DROP TABLE IF EXISTS estatisticas")
     conn.commit()
     conn.close()
     init_db()
 
 def apagar_jogo_por_id(jogo_id):
-    """Apaga um jogo específico e os seus participantes, decrementando o contador de publicados."""
-    conn = get_db_connection()
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    
-    # Verificar se o jogo existe
-    cursor.execute("SELECT jogo_id FROM jogos WHERE jogo_id = ?", (jogo_id,))
+    cursor.execute("SELECT id FROM jogos WHERE id = ?", (jogo_id,))
     if not cursor.fetchone():
         conn.close()
         return False
-        
-    # Apagar participantes associados
-    cursor.execute("DELETE FROM participantes WHERE jogo_id = ?", (jogo_id,))
-    # Apagar o jogo
-    cursor.execute("DELETE FROM jogos WHERE jogo_id = ?", (jogo_id,))
-    
-    # Decrementar o contador de publicados nas estatísticas
-    cursor.execute("UPDATE estatisticas SET valor = MAX(0, valor - 1) WHERE chave = 'publicados'")
-    
+    cursor.execute("DELETE FROM cliques WHERE jogo_id = ?", (jogo_id,))
+    cursor.execute("DELETE FROM jogos WHERE id = ?", (jogo_id,))
     conn.commit()
     conn.close()
     return True
 
-def proximo_jogo_id():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT jogo_id FROM jogos ORDER BY rowid DESC LIMIT 1")
-    ultimo = cursor.fetchone()
-    conn.close()
-    
-    if not ultimo:
-        return "J1"
-    
-    ultimo_id = ultimo["jogo_id"].upper()
-    try:
-        numero = int(ultimo_id.replace("J", ""))
-        return f"J{numero + 1}"
-    except ValueError:
-        return "J1"
-
 def guardar_jogo(equipas, data_hora_str, data_hora_obj, odd):
-    jogo_id = proximo_jogo_id()
-    conn = get_db_connection()
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("""
-        INSERT OR REPLACE INTO jogos (jogo_id, equipas, data_hora_str, data_hora_obj, odd, status)
-        VALUES (?, ?, ?, ?, ?, 'Pendente')
-    """, (jogo_id, equipas, data_hora_str, data_hora_obj, odd))
     
-    cursor.execute("UPDATE estatisticas SET valor = valor + 1 WHERE chave = 'publicados'")
+    cursor.execute("SELECT id FROM jogos")
+    jogos_existentes = cursor.fetchall()
+    novo_id_num = len(jogos_existentes) + 1
+    jogo_id = f"J{novo_id_num}"
+    
+    cursor.execute('''
+        INSERT INTO jogos (id, equipas, data_hora_str, data_hora_obj, odd, status)
+        VALUES (?, ?, ?, ?, ?, 'Pendente')
+    ''', (jogo_id, equipas, data_hora_str, data_hora_obj.strftime("%Y-%m-%d %H:%M:%S"), odd))
+    
     conn.commit()
     conn.close()
     return jogo_id
 
 def obter_jogo(jogo_id):
-    conn = get_db_connection()
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM jogos WHERE jogo_id = ?", (jogo_id,))
-    jogo = cursor.fetchone()
+    cursor.execute("SELECT id, equipas, data_hora_str, data_hora_obj, odd, status FROM jogos WHERE id = ?", (jogo_id,))
+    row = cursor.fetchone()
     conn.close()
-    return jogo
+    
+    if row:
+        return {
+            "id": row[0],
+            "equipas": row[1],
+            "data_hora_str": row[2],
+            "data_hora_obj": row[3],
+            "odd": row[4],
+            "status": row[5]
+        }
+    return None
+
+def obter_todos_os_jogos():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, equipas, odd, status FROM jogos")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    jogos = []
+    for r in rows:
+        jogos.append({
+            "id": r[0],
+            "equipas": r[1],
+            "odd": r[2],
+            "status": r[3]
+        })
+    return jogos
 
 def registar_clique(jogo_id, user_id, user_name):
-    conn = get_db_connection()
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    cursor.execute("SELECT id FROM participantes WHERE jogo_id = ? AND user_id = ?", (jogo_id, user_id))
-    ja_registado = cursor.fetchone()
+    cursor.execute("SELECT ref_codigo FROM cliques WHERE jogo_id = ? AND user_id = ?", (jogo_id, user_id))
+    row = cursor.fetchone()
     
-    if not ja_registado:
-        cursor.execute("""
-            INSERT INTO participantes (jogo_id, user_id, user_name, ref_codigo, estado_pagamento)
-            VALUES (?, ?, ?, '', 'Aguardando Resultado')
-        """, (jogo_id, user_id, user_name))
-        conn.commit()
-        registado_agora = True
-    else:
-        registado_agora = False
+    if row:
+        conn.close()
+        return row[0]
         
+    ref_codigo = f"{jogo_id}-{random.randint(1000, 9999)}"
+    
+    cursor.execute('''
+        INSERT OR IGNORE INTO cliques (jogo_id, user_id, user_name, ref_codigo, estado_pagamento)
+        VALUES (?, ?, ?, ?, 'Pendente')
+    ''', (jogo_id, user_id, user_name, ref_codigo))
+    
+    conn.commit()
     conn.close()
-    return registado_agora
+    return ref_codigo
 
-def processar_resultado_jogo(jogo_id, res):
-    conn = get_db_connection()
+def processar_resultado_jogo(jogo_id, status_final):
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    cursor.execute("SELECT equipas, odd FROM jogos WHERE jogo_id = ?", (jogo_id,))
+    cursor.execute("SELECT id, equipas, odd FROM jogos WHERE id = ?", (jogo_id,))
     jogo = cursor.fetchone()
     if not jogo:
         conn.close()
         return None
         
-    cursor.execute("UPDATE jogos SET status = ? WHERE jogo_id = ?", (res, jogo_id))
+    cursor.execute("UPDATE jogos SET status = ? WHERE id = ?", (status_final, jogo_id))
     
-    if res == "Green":
-        cursor.execute("UPDATE estatisticas SET valor = valor + 1 WHERE chave = 'greens'")
-        cursor.execute("SELECT user_id, user_name FROM participantes WHERE jogo_id = ?", (jogo_id,))
-        participantes = cursor.fetchall()
+    cobrancas = []
+    if status_final == "Green":
+        cursor.execute("SELECT user_id, ref_codigo FROM cliques WHERE jogo_id = ?", (jogo_id,))
+        cobrancas = cursor.fetchall()
         
-        data_limite = datetime.now() + timedelta(hours=24)
-        cobrancas = []
-        
-        for p in participantes:
-            u_id, u_name = p
-            ref_codigo = f"{jogo_id}-{random.randint(1000, 9999)}"
-            
-            cursor.execute("""
-                UPDATE participantes 
-                SET ref_codigo = ?, estado_pagamento = 'Pendente', data_limite = ? 
-                WHERE jogo_id = ? AND user_id = ?
-            """, (ref_codigo, data_limite, jogo_id, u_id))
-            
-            cobrancas.append((u_id, ref_codigo))
-            
-        conn.commit()
-        conn.close()
-        return {"equipas": jogo["equipas"], "odd": jogo["odd"], "cobrancas": cobrancas}
-    else:
-        cursor.execute("UPDATE estatisticas SET valor = valor + 1 WHERE chave = 'reds'")
-        conn.commit()
-        conn.close()
-        return {"equipas": jogo["equipas"], "odd": jogo["odd"], "cobrancas": []}
+    conn.commit()
+    conn.close()
+    
+    return {
+        "equipas": jogo[1],
+        "odd": jogo[2],
+        "cobrancas": cobrancas
+    }
 
 def obter_dados_lista(jogo_id):
-    conn = get_db_connection()
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM jogos WHERE jogo_id = ?", (jogo_id,))
-    jogo = cursor.fetchone()
     
-    if not jogo:
+    cursor.execute("SELECT id, equipas, odd, status FROM jogos WHERE id = ?", (jogo_id,))
+    jogo_row = cursor.fetchone()
+    if not jogo_row:
         conn.close()
         return None
         
-    cursor.execute("SELECT ref_codigo, user_name, user_id, estado_pagamento FROM participantes WHERE jogo_id = ?", (jogo_id,))
-    participantes = cursor.fetchall()
+    jogo = {
+        "id": jogo_row[0],
+        "equipas": jogo_row[1],
+        "odd": jogo_row[2],
+        "status": jogo_row[3]
+    }
+    
+    cursor.execute("SELECT user_id, user_name, ref_codigo, estado_pagamento FROM cliques WHERE jogo_id = ?", (jogo_id,))
+    participantes_rows = cursor.fetchall()
     conn.close()
     
+    participantes = []
+    for p in participantes_rows:
+        participantes.append({
+            "user_id": p[0],
+            "user_name": p[1],
+            "ref_codigo": p[2],
+            "estado_pagamento": p[3]
+        })
+        
     return jogo, participantes
 
-def confirmar_pagamento_por_ref(ref):
-    conn = get_db_connection()
+def confirmar_pagamento_por_ref(ref_codigo):
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
-    cursor.execute("SELECT user_id, user_name, jogo_id, estado_pagamento FROM participantes WHERE ref_codigo = ?", (ref,))
-    reg = cursor.fetchone()
     
-    if not reg:
+    cursor.execute("SELECT jogo_id, user_id, user_name, estado_pagamento FROM cliques WHERE ref_codigo = ?", (ref_codigo,))
+    row = cursor.fetchone()
+    
+    if not row:
         conn.close()
         return None
         
-    if reg["estado_pagamento"] == 'Pago':
+    jogo_id, user_id, user_name, estado_atual = row
+    
+    if estado_atual == "Pago":
         conn.close()
-        return {"status": "ja_pago"}
+        return {"status": "ja_pago", "user_name": user_name}
         
-    cursor.execute("UPDATE participantes SET estado_pagamento = 'Pago' WHERE ref_codigo = ?", (ref,))
+    cursor.execute("UPDATE cliques SET estado_pagamento = 'Pago' WHERE ref_codigo = ?", (ref_codigo,))
     conn.commit()
     conn.close()
     
     return {
         "status": "sucesso",
-        "user_id": reg["user_id"],
-        "user_name": reg["user_name"],
-        "jogo_id": reg["jogo_id"]
+        "jogo_id": jogo_id,
+        "user_id": user_id,
+        "user_name": user_name
     }
 
 def obter_estatisticas_globais():
-    conn = get_db_connection()
+    conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    cursor.execute("SELECT valor FROM estatisticas WHERE chave = 'publicados'")
-    pub = cursor.fetchone()["valor"]
+    cursor.execute("SELECT COUNT(*) FROM jogos WHERE status IN ('Green', 'Red')")
+    publicados = cursor.fetchone()[0]
     
-    cursor.execute("SELECT valor FROM estatisticas WHERE chave = 'greens'")
-    greens = cursor.fetchone()["valor"]
+    cursor.execute("SELECT COUNT(*) FROM jogos WHERE status = 'Green'")
+    greens = cursor.fetchone()[0]
     
-    cursor.execute("SELECT valor FROM estatisticas WHERE chave = 'reds'")
-    reds = cursor.fetchone()["valor"]
+    cursor.execute("SELECT COUNT(*) FROM jogos WHERE status = 'Red'")
+    reds = cursor.fetchone()[0]
     
     conn.close()
-    return pub, greens, reds
+    return publicados, greens, reds
