@@ -42,8 +42,9 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
-# Dicionário temporário para guardar o progresso do assistente de publicação por passos
+# Dicionários temporários para os assistentes passo a passo
 publicacao_passos = {}
+resultado_passos = {}
 
 # Inicializar BD ao arrancar
 init_db()
@@ -61,13 +62,13 @@ def mostrar_ajuda(message):
     texto_ajuda = (
         "🛠️ *Painel de Ajuda - Comandos de Admin*\n\n"
         "📌 *1. Publicar Jogo (Passo a Passo):*\n"
-        "`/publicar` (o bot guia-te de seguida)\n\n"
+        "`/publicar` (o bot guia-te)\n\n"
         "📌 *2. Listar Todos os Jogos (Estados):*\n"
         "`/jogos`\n\n"
         "📌 *3. Publicar Regras no Canal:*\n"
         "`/regras`\n\n"
-        "📌 *4. Registar Resultado:*\n"
-        "`/resultado [ID] | [Placar] | Green` (ou `Red`)\n\n"
+        "📌 *4. Registar Resultado (Passo a Passo):*\n"
+        "`/resultado` (o bot guia-te)\n\n"
         "📌 *5. Consultar Lista de Apostadores de um Jogo:*\n"
         "`/lista [ID]` (Ex: `/lista J1`)\n\n"
         "📌 *6. Confirmar Pagamento MB Way:*\n"
@@ -181,78 +182,145 @@ def callback_aceitar_regras(call):
         bot.answer_callback_query(call.id, "⚠️ Por favor, inicia primeiro uma conversa privada com o bot.", show_alert=True)
 
 # ==========================================
-# NOVO FLUXO: Publicar por Passos (Assistente)
+# ASSISTENTE 1: Publicar por Passos
 # ==========================================
 @bot.message_handler(commands=['publicar'])
 def iniciar_publicacao(message):
     if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
         return
-
     admin_id = message.from_user.id
-    # Inicia o processo para este admin
     publicacao_passos[admin_id] = {"passo": "aguardar_equipas"}
-    
     bot.reply_to(message, "⚽ *Passo 1/3:* Quais são as equipas?\n_(Ex: Benfica vs Sporting)_", parse_mode="Markdown")
 
-# Captura as respostas textuais dos passos
-@bot.message_handler(func=lambda m: m.from_user.id in publicacao_passos)
-def processar_passos_publicacao(message):
+# ==========================================
+# ASSISTENTE 2: Registar Resultado por Passos
+# ==========================================
+@bot.message_handler(commands=['resultado'])
+def iniciar_resultado(message):
+    if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
+        return
     admin_id = message.from_user.id
-    estado = publicacao_passos[admin_id]["passo"]
+    resultado_passos[admin_id] = {"passo": "aguardar_id"}
+    bot.reply_to(message, "📊 *Passo 1/3:* Qual é o ID do jogo?\n_(Ex: J1)_", parse_mode="Markdown")
+
+# Captura centralizada de mensagens de texto para os dois assistentes
+@bot.message_handler(func=lambda m: m.from_user.id in publicacao_passos or m.from_user.id in resultado_passos)
+def processar_assistentes(message):
+    admin_id = message.from_user.id
     texto = message.text.strip()
 
-    if estado == "aguardar_equipas":
-        publicacao_passos[admin_id]["equipas"] = texto
-        publicacao_passos[admin_id]["passo"] = "aguardar_data"
-        bot.reply_to(message, "📅 *Passo 2/3:* Qual a data e hora do jogo?\n_(Formato: DD/MM/AAAA HH:MM ex: 06/11/2026 21:00)_", parse_mode="Markdown")
+    # --- FLUXO DE PUBLICAÇÃO ---
+    if admin_id in publicacao_passos:
+        estado = publicacao_passos[admin_id]["passo"]
 
-    elif estado == "aguardar_data":
-        try:
-            # Validar formato da data
-            datetime.strptime(texto, "%d/%m/%Y %H:%M")
-            publicacao_passos[admin_id]["data_hora"] = texto
-            publicacao_passos[admin_id]["passo"] = "aguardar_odd"
-            bot.reply_to(message, "📈 *Passo 3/3:* Qual é a odd?\n_(Ex: 1.85)_", parse_mode="Markdown")
-        except ValueError:
-            bot.reply_to(message, "⚠️ Formato de data inválido. Usa obrigatoriamente o formato: `DD/MM/AAAA HH:MM`", parse_mode="Markdown")
+        if estado == "aguardar_equipas":
+            publicacao_passos[admin_id]["equipas"] = texto
+            publicacao_passos[admin_id]["passo"] = "aguardar_data"
+            bot.reply_to(message, "📅 *Passo 2/3:* Qual a data e hora do jogo?\n_(Formato: DD/MM/AAAA HH:MM ex: 06/11/2026 21:00)_", parse_mode="Markdown")
 
-    elif estado == "aguardar_odd":
-        odd = texto
-        dados = publicacao_passos[admin_id]
-        equipas = dados["equipas"]
-        data_hora_str = dados["data_hora"]
+        elif estado == "aguardar_data":
+            try:
+                datetime.strptime(texto, "%d/%m/%Y %H:%M")
+                publicacao_passos[admin_id]["data_hora"] = texto
+                publicacao_passos[admin_id]["passo"] = "aguardar_odd"
+                bot.reply_to(message, "📈 *Passo 3/3:* Qual é a odd?\n_(Ex: 1.85)_", parse_mode="Markdown")
+            except ValueError:
+                bot.reply_to(message, "⚠️ Formato de data inválido. Usa obrigatoriamente: `DD/MM/AAAA HH:MM`", parse_mode="Markdown")
 
-        # Limpar estado
-        del publicacao_passos[admin_id]
+        elif estado == "aguardar_odd":
+            odd = texto
+            dados = publicacao_passos[admin_id]
+            equipas = dados["equipas"]
+            data_hora_str = dados["data_hora"]
+            del publicacao_passos[admin_id]
 
-        # Criar objeto data
-        data_hora_obj = datetime.strptime(data_hora_str, "%d/%m/%Y %H:%M")
-        data_str = data_hora_obj.strftime("%d/%m/%Y")
-        hora_str = data_hora_obj.strftime("%H:%M")
+            data_hora_obj = datetime.strptime(data_hora_str, "%d/%m/%Y %H:%M")
+            data_str = data_hora_obj.strftime("%d/%m/%Y")
+            hora_str = data_hora_obj.strftime("%H:%M")
 
-        # Guardar na base de dados
-        jogo_id = guardar_jogo(equipas, data_hora_str, data_hora_obj, odd)
+            jogo_id = guardar_jogo(equipas, data_hora_str, data_hora_obj, odd)
 
-        texto_canal = (
-            f"⚽ *BetOverTwo - Prognóstico {jogo_id}*\n\n"
-            f"🏟️ *Equipas:* Oculto 🔒\n"
-            f"📅 *Data:* {data_str}\n"
-            f"⏰ *Hora:* {hora_str}\n"
-            f"🎯 *Mercado:* Ambas Marcam & +2.5 Golos\n"
-            f"📈 *Odd:* `{odd}`\n\n"
-            "_🔒 Jogo Oculto - Clica abaixo para desbloquear._"
-        )
-        
-        markup = InlineKeyboardMarkup()
-        markup.add(InlineKeyboardButton(f"🔓 Desbloquear (Aceito pagar 2€ se der Green) ({jogo_id})", callback_data=f"desbloquear_{jogo_id}"))
-        
-        destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
-        
-        try:
-            bot.send_message(destino, texto_canal, parse_mode="Markdown", reply_markup=markup)
-            bot.reply_to(message, f"✅ Jogo `{jogo_id}` ({equipas}) publicado com sucesso no canal!", parse_mode="Markdown")
-        except Exception as e:
-            bot.reply_to(message, f"❌ Erro ao publicar no canal. O bot é administrador?\nDetalhe: {e}", parse_mode="Markdown")
+            texto_canal = (
+                f"⚽ *BetOverTwo - Prognóstico {jogo_id}*\n\n"
+                f"🏟️ *Equipas:* Oculto 🔒\n"
+                f"📅 *Data:* {data_str}\n"
+                f"⏰ *Hora:* {hora_str}\n"
+                f"🎯 *Mercado:* Ambas Marcam & +2.5 Golos\n"
+                f"📈 *Odd:* `{odd}`\n\n"
+                "_🔒 Jogo Oculto - Clica abaixo para desbloquear._"
+            )
+            
+            markup = InlineKeyboardMarkup()
+            markup.add(InlineKeyboardButton(f"🔓 Desbloquear (Aceito pagar 2€ se der Green) ({jogo_id})", callback_data=f"desbloquear_{jogo_id}"))
+            
+            destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
+            try:
+                bot.send_message(destino, texto_canal, parse_mode="Markdown", reply_markup=markup)
+                bot.reply_to(message, f"✅ Jogo `{jogo_id}` ({equipas}) publicado com sucesso no canal!", parse_mode="Markdown")
+            except Exception as e:
+                bot.reply_to(message, f"❌ Erro ao publicar no canal. O bot é administrador?\nDetalhe: {e}", parse_mode="Markdown")
+
+    # --- FLUXO DE RESULTADO ---
+    elif admin_id in resultado_passos:
+        estado = resultado_passos[admin_id]["passo"]
+
+        if estado == "aguardar_id":
+            jogo_id = texto.upper()
+            jogo = obter_jogo(jogo_id)
+            if not jogo:
+                bot.reply_to(message, f"❌ Jogo `{jogo_id}` não encontrado na base de dados. Tenta novamente o ID correto:", parse_mode="Markdown")
+                return
+            resultado_passos[admin_id]["jogo_id"] = jogo_id
+            resultado_passos[admin_id]["passo"] = "aguardar_placar"
+            bot.reply_to(message, "📌 *Passo 2/3:* Qual foi o placar final?\n_(Ex: 2-1)_", parse_mode="Markdown")
+
+        elif estado == "aguardar_placar":
+            resultado_passos[admin_id]["placar"] = texto
+            resultado_passos[admin_id]["passo"] = "aguardar_status"
+            bot.reply_to(message, "👉 *Passo 3/3:* Qual foi o resultado?\n_(Envia exatamente **Green** ou **Red**)_", parse_mode="Markdown")
+
+        elif estado == "aguardar_status":
+            res_input = texto.capitalize()
+            if res_input not in ["Green", "Red"]:
+                bot.reply_to(message, "⚠️ Estado inválido. Envia estritamente `Green` ou `Red`:", parse_mode="Markdown")
+                return
+
+            dados = resultado_passos[admin_id]
+            jogo_id = dados["jogo_id"]
+            placar = dados["placar"]
+            del resultado_passos[admin_id]
+
+            resultado_processamento = processar_resultado_jogo(jogo_id, res_input)
+            if not resultado_processamento:
+                bot.reply_to(message, f"❌ Erro ao processar o jogo `{jogo_id}`.", parse_mode="Markdown")
+                return
+
+            emoji = "✅🟢" if res_input == "Green" else "❌🔴"
+            texto_res = (
+                f"📊 *Resultado Final ({jogo_id})*\n\n"
+                f"⚽ *Equipas:* {resultado_processamento['equipas']}\n"
+                f"📌 *Placar:* {placar}\n"
+                f"📉 *Odd:* `{resultado_processamento['odd']}`\n"
+                f"👉 *Status:* {emoji} *{res_input.upper()}*"
+            )
+            
+            destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
+            bot.send_message(destino, texto_res, parse_mode="Markdown")
+
+            if res_input == "Green":
+                for u_id, ref_codigo in resultado_processamento['cobrancas']:
+                    msg_cobranca = (
+                        f"🎉 O Jogo *{jogo_id}* deu *GREEN!* 🟢\n\n"
+                        f"Conforme as regras aceites, efetua o pagamento de *2€* via MB Way (`{MBWAY_NUMBER}`).\n"
+                        f"🔑 *Referência:* `{ref_codigo}` (Prazo máximo: 24h)"
+                    )
+                    try:
+                        bot.send_message(u_id, msg_cobranca, parse_mode="Markdown")
+                    except Exception:
+                        pass
+                bot.reply_to(message, f"✅ Green registado para `{jogo_id}` e cobranças enviadas aos apostadores!", parse_mode="Markdown")
+            else:
+                bot.reply_to(message, f"✅ Red registado para `{jogo_id}` com sucesso!", parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("desbloquear_"))
 def callback_desbloquear(call):
@@ -286,56 +354,6 @@ def callback_desbloquear(call):
         bot.answer_callback_query(call.id, "Detalhes desbloqueados e enviados em privado!")
     except Exception:
         bot.answer_callback_query(call.id, "Inicia primeiro chat privado com o bot (/start).", show_alert=True)
-
-@bot.message_handler(commands=['resultado'])
-def registar_resultado(message):
-    if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
-        return
-
-    parts = [p.strip() for p in message.text.replace("/resultado", "").split("|")]
-    if len(parts) < 3:
-        bot.reply_to(message, "⚠️ Formato correto: `/resultado J1 | 2-1 | Green` (ou `Red`)", parse_mode="Markdown")
-        return
-    
-    jogo_id = parts[0].upper()
-    placar = parts[1]
-    res_input = parts[2].capitalize()
-    
-    if res_input not in ["Green", "Red"]:
-        bot.reply_to(message, "⚠️ O estado tem de ser estritamente `Green` ou `Red`.", parse_mode="Markdown")
-        return
-
-    resultado_processamento = processar_resultado_jogo(jogo_id, res_input)
-    if not resultado_processamento:
-        bot.reply_to(message, f"❌ Jogo `{jogo_id}` não encontrado na base de dados.", parse_mode="Markdown")
-        return
-
-    emoji = "✅🟢" if res_input == "Green" else "❌🔴"
-    texto_res = (
-        f"📊 *Resultado Final ({jogo_id})*\n\n"
-        f"⚽ *Equipas:* {resultado_processamento['equipas']}\n"
-        f"📌 *Placar:* {placar}\n"
-        f"📉 *Odd:* `{resultado_processamento['odd']}`\n"
-        f"👉 *Status:* {emoji} *{res_input.upper()}*"
-    )
-    
-    destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
-    bot.send_message(destino, texto_res, parse_mode="Markdown")
-
-    if res_input == "Green":
-        for u_id, ref_codigo in resultado_processamento['cobrancas']:
-            msg_cobranca = (
-                f"🎉 O Jogo *{jogo_id}* deu *GREEN!* 🟢\n\n"
-                f"Conforme as regras aceites, efetua o pagamento de *2€* via MB Way (`{MBWAY_NUMBER}`).\n"
-                f"🔑 *Referência:* `{ref_codigo}` (Prazo máximo: 24h)"
-            )
-            try:
-                bot.send_message(u_id, msg_cobranca, parse_mode="Markdown")
-            except Exception:
-                pass
-        bot.reply_to(message, f"✅ Green registado para `{jogo_id}` e cobranças enviadas!", parse_mode="Markdown")
-    else:
-        bot.reply_to(message, f"✅ Red registado para `{jogo_id}` com sucesso!", parse_mode="Markdown")
 
 @bot.message_handler(commands=['lista'])
 def ver_lista_jogo(message):
