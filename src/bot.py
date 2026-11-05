@@ -76,7 +76,7 @@ def mostrar_ajuda(message):
     )
     bot.reply_to(message, texto_ajuda, parse_mode="Markdown")
 
-# Novo Comando: Listar todos os jogos e respetivos estados
+# Comando: Listar todos os jogos e respetivos estados
 @bot.message_handler(commands=['jogos'])
 def listar_todos_jogos(message):
     if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
@@ -186,7 +186,11 @@ def publicar_prognostico(message):
     parts = [p.strip() for p in texto_args.split("|")]
     
     if len(parts) < 3:
-        bot.reply_to(message, "⚠️ **Uso incorreto!** Formato simplificado:\n`/publicar Equipas | DD/MM/AAAA HH:MM | Odd`", parse_mode="Markdown")
+        bot.reply_to(
+            message, 
+            "⚠️ **Formato inválido!** Usa exatamente este formato:\n`/publicar Equipas | DD/MM/AAAA HH:MM | Odd`\n\n_Exemplo:_\n`/publicar Porto vs Sporting | 31/10/2026 21:00 | 1.85`", 
+            parse_mode="Markdown"
+        )
         return
     
     equipas = parts[0]
@@ -196,7 +200,7 @@ def publicar_prognostico(message):
     try:
         data_hora_obj = datetime.strptime(data_hora_str, "%d/%m/%Y %H:%M")
     except ValueError:
-        bot.reply_to(message, "⚠️ Formato de data inválido! Usa: `DD/MM/AAAA HH:MM`", parse_mode="Markdown")
+        bot.reply_to(message, f"⚠️ Erro na data/hora (`{data_hora_str}`). Usa o formato: `DD/MM/AAAA HH:MM`", parse_mode="Markdown")
         return
 
     data_str = data_hora_obj.strftime("%d/%m/%Y")
