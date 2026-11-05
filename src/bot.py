@@ -42,6 +42,9 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
+# Dicionário temporário para guardar o progresso do assistente de publicação por passos
+publicacao_passos = {}
+
 # Inicializar BD ao arrancar
 init_db()
 
@@ -57,8 +60,8 @@ def mostrar_ajuda(message):
 
     texto_ajuda = (
         "🛠️ *Painel de Ajuda - Comandos de Admin*\n\n"
-        "📌 *1. Publicar Jogo:*\n"
-        "`/publicar Equipas | DD/MM/AAAA HH:MM | Odd`\n\n"
+        "📌 *1. Publicar Jogo (Passo a Passo):*\n"
+        "`/publicar` (o bot guia-te de seguida)\n\n"
         "📌 *2. Listar Todos os Jogos (Estados):*\n"
         "`/jogos`\n\n"
         "📌 *3. Publicar Regras no Canal:*\n"
@@ -177,57 +180,79 @@ def callback_aceitar_regras(call):
     except Exception:
         bot.answer_callback_query(call.id, "⚠️ Por favor, inicia primeiro uma conversa privada com o bot.", show_alert=True)
 
+# ==========================================
+# NOVO FLUXO: Publicar por Passos (Assistente)
+# ==========================================
 @bot.message_handler(commands=['publicar'])
-def publicar_prognostico(message):
+def iniciar_publicacao(message):
     if ADMIN_ID and str(message.from_user.id) != str(ADMIN_ID):
         return
 
-    texto_args = message.text.replace("/publicar", "").strip()
-    parts = [p.strip() for p in texto_args.split("|")]
+    admin_id = message.from_user.id
+    # Inicia o processo para este admin
+    publicacao_passos[admin_id] = {"passo": "aguardar_equipas"}
     
-    if len(parts) < 3:
-        bot.reply_to(
-            message, 
-            "⚠️ **Formato inválido!** Usa exatamente este formato:\n`/publicar Equipas | DD/MM/AAAA HH:MM | Odd`\n\n_Exemplo:_\n`/publicar Porto vs Sporting | 31/10/2026 21:00 | 1.85`", 
-            parse_mode="Markdown"
-        )
-        return
-    
-    equipas = parts[0]
-    data_hora_str = parts[1]
-    odd = parts[2]
-    
-    try:
+    bot.reply_to(message, "⚽ *Passo 1/3:* Quais são as equipas?\n_(Ex: Benfica vs Sporting)_", parse_mode="Markdown")
+
+# Captura as respostas textuais dos passos
+@bot.message_handler(func=lambda m: m.from_user.id in publicacao_passos)
+def processar_passos_publicacao(message):
+    admin_id = message.from_user.id
+    estado = publicacao_passos[admin_id]["passo"]
+    texto = message.text.strip()
+
+    if estado == "aguardar_equipas":
+        publicacao_passos[admin_id]["equipas"] = texto
+        publicacao_passos[admin_id]["passo"] = "aguardar_data"
+        bot.reply_to(message, "📅 *Passo 2/3:* Qual a data e hora do jogo?\n_(Formato: DD/MM/AAAA HH:MM ex: 06/11/2026 21:00)_", parse_mode="Markdown")
+
+    elif estado == "aguardar_data":
+        try:
+            # Validar formato da data
+            datetime.strptime(texto, "%d/%m/%Y %H:%M")
+            publicacao_passos[admin_id]["data_hora"] = texto
+            publicacao_passos[admin_id]["passo"] = "aguardar_odd"
+            bot.reply_to(message, "📈 *Passo 3/3:* Qual é a odd?\n_(Ex: 1.85)_", parse_mode="Markdown")
+        except ValueError:
+            bot.reply_to(message, "⚠️ Formato de data inválido. Usa obrigatoriamente o formato: `DD/MM/AAAA HH:MM`", parse_mode="Markdown")
+
+    elif estado == "aguardar_odd":
+        odd = texto
+        dados = publicacao_passos[admin_id]
+        equipas = dados["equipas"]
+        data_hora_str = dados["data_hora"]
+
+        # Limpar estado
+        del publicacao_passos[admin_id]
+
+        # Criar objeto data
         data_hora_obj = datetime.strptime(data_hora_str, "%d/%m/%Y %H:%M")
-    except ValueError:
-        bot.reply_to(message, f"⚠️ Erro na data/hora (`{data_hora_str}`). Usa o formato: `DD/MM/AAAA HH:MM`", parse_mode="Markdown")
-        return
+        data_str = data_hora_obj.strftime("%d/%m/%Y")
+        hora_str = data_hora_obj.strftime("%H:%M")
 
-    data_str = data_hora_obj.strftime("%d/%m/%Y")
-    hora_str = data_hora_obj.strftime("%H:%M")
+        # Guardar na base de dados
+        jogo_id = guardar_jogo(equipas, data_hora_str, data_hora_obj, odd)
 
-    jogo_id = guardar_jogo(equipas, data_hora_str, data_hora_obj, odd)
-
-    texto_canal = (
-        f"⚽ *BetOverTwo - Prognóstico {jogo_id}*\n\n"
-        f"🏟️ *Equipas:* Oculto 🔒\n"
-        f"📅 *Data:* {data_str}\n"
-        f"⏰ *Hora:* {hora_str}\n"
-        f"🎯 *Mercado:* Ambas Marcam & +2.5 Golos\n"
-        f"📈 *Odd:* `{odd}`\n\n"
-        "_🔒 Jogo Oculto - Clica abaixo para desbloquear._"
-    )
-    
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton(f"🔓 Desbloquear (Aceito pagar 2€ se der Green) ({jogo_id})", callback_data=f"desbloquear_{jogo_id}"))
-    
-    destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
-    
-    try:
-        bot.send_message(destino, texto_canal, parse_mode="Markdown", reply_markup=markup)
-        bot.reply_to(message, f"✅ Prognóstico `{jogo_id}` publicado com sucesso no canal!", parse_mode="Markdown")
-    except Exception as e:
-        bot.reply_to(message, f"❌ Erro ao publicar no canal. Verifica se o bot é administrador.\nDetalhe: {e}", parse_mode="Markdown")
+        texto_canal = (
+            f"⚽ *BetOverTwo - Prognóstico {jogo_id}*\n\n"
+            f"🏟️ *Equipas:* Oculto 🔒\n"
+            f"📅 *Data:* {data_str}\n"
+            f"⏰ *Hora:* {hora_str}\n"
+            f"🎯 *Mercado:* Ambas Marcam & +2.5 Golos\n"
+            f"📈 *Odd:* `{odd}`\n\n"
+            "_🔒 Jogo Oculto - Clica abaixo para desbloquear._"
+        )
+        
+        markup = InlineKeyboardMarkup()
+        markup.add(InlineKeyboardButton(f"🔓 Desbloquear (Aceito pagar 2€ se der Green) ({jogo_id})", callback_data=f"desbloquear_{jogo_id}"))
+        
+        destino = CHANNEL_ID if CHANNEL_ID else message.chat.id
+        
+        try:
+            bot.send_message(destino, texto_canal, parse_mode="Markdown", reply_markup=markup)
+            bot.reply_to(message, f"✅ Jogo `{jogo_id}` ({equipas}) publicado com sucesso no canal!", parse_mode="Markdown")
+        except Exception as e:
+            bot.reply_to(message, f"❌ Erro ao publicar no canal. O bot é administrador?\nDetalhe: {e}", parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("desbloquear_"))
 def callback_desbloquear(call):
